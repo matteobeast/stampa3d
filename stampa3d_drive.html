@@ -327,7 +327,7 @@ const FILE_NAME = 'dati_stampa3d.json';
 const LS_CLIENT = 'stampa3d_clientId';
 const LS_DATA   = 'stampa3d_v3';
 const LS_FILEID = 'stampa3d_driveFileId';
-const LS_TOKEN  = 'stampa3d_token';
+const LS_TOKEN  = 'stampa3d_token'; // localStorage — persiste tra sessioni
 
 let CLIENT_ID = localStorage.getItem(LS_CLIENT) || '';
 let accessToken = '';
@@ -340,7 +340,7 @@ let viewMode = 'card';
 
 // ══ INIT FLOW ══
 window.addEventListener('load', () => {
-  // Se questa finestra è un popup OAuth, comunica il token al padre e chiuditi
+  // Popup OAuth: manda token al padre e chiuditi
   if (window.opener && window.opener !== window) {
     const hash = window.location.hash;
     if (hash && hash.includes('access_token')) {
@@ -354,22 +354,104 @@ window.addEventListener('load', () => {
 
   if (!CLIENT_ID) { showSetup(); return; }
 
-  // Prova a ripristinare il token di sessione
+  // Prova a ripristinare token da localStorage (persiste tra sessioni)
   try {
-    const saved = sessionStorage.getItem(LS_TOKEN);
+    const saved = localStorage.getItem(LS_TOKEN);
     if (saved) {
-      const { token, expiry } = JSON.parse(saved);
+      const { token, expiry, userName, userPic } = JSON.parse(saved);
       if (expiry > Date.now() + 60000) {
+        // Token ancora valido — entra direttamente
         accessToken = token;
         tokenExpiry = expiry;
+        if (userName) document.getElementById('userName').textContent = userName;
+        if (userPic)  document.getElementById('userAvatar').src = userPic;
         showApp();
-        fetchUserInfo().then(() => loadFromDrive());
+        loadFromDrive();
+        scheduleTokenRefresh(expiry);
         return;
       }
     }
   } catch(e) {}
-  showLogin();
+
+  // Token scaduto o assente — prova silent refresh con iframe
+  trySilentRefresh();
 });
+
+// ══ SILENT REFRESH ══
+// Prova a rinnovare il token senza mostrare nulla all'utente.
+// Se Google ha ancora una sessione attiva funziona in ~1s,
+// altrimenti mostra la schermata di login normale.
+function trySilentRefresh() {
+  showSplash();
+  const redirectUri = location.href.split('#')[0].split('?')[0];
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: redirectUri,
+    response_type: 'token',
+    scope: SCOPE + ' https://www.googleapis.com/auth/userinfo.profile',
+    prompt: 'none', // nessun UI — fallisce se serve interazione
+  });
+  const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none';
+  iframe.src = authUrl;
+  document.body.appendChild(iframe);
+
+  // Timeout: se entro 4s non arriva risposta, mostra login
+  const timeout = setTimeout(() => {
+    window.removeEventListener('message', onSilent);
+    document.body.removeChild(iframe);
+    hideSplash();
+    showLogin();
+  }, 4000);
+
+  function onSilent(event) {
+    if (event.origin !== location.origin) return;
+    if (!event.data || event.data.type !== 'oauth_token') return;
+    clearTimeout(timeout);
+    window.removeEventListener('message', onSilent);
+    document.body.removeChild(iframe);
+    const p = new URLSearchParams(event.data.hash.slice(1));
+    const token = p.get('access_token');
+    const expiresIn = parseInt(p.get('expires_in') || '3600');
+    if (token) {
+      accessToken = token;
+      tokenExpiry = Date.now() + expiresIn * 1000;
+      hideSplash();
+      showApp();
+      fetchUserInfo(true).then(() => loadFromDrive());
+      scheduleTokenRefresh(tokenExpiry);
+    } else {
+      hideSplash();
+      showLogin();
+    }
+  }
+  window.addEventListener('message', onSilent);
+}
+
+// Rinnova automaticamente il token 5 minuti prima che scada
+function scheduleTokenRefresh(expiry) {
+  const delay = expiry - Date.now() - 5 * 60 * 1000;
+  if (delay > 0) setTimeout(trySilentRefresh, delay);
+}
+
+// Splash screen durante il silent refresh
+function showSplash() {
+  let s = document.getElementById('splashScreen');
+  if (!s) {
+    s = document.createElement('div');
+    s.id = 'splashScreen';
+    s.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:2000;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px';
+    s.innerHTML = '<div style="width:34px;height:34px;border-radius:8px;background:var(--accent);display:flex;align-items:center;justify-content:center"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div><div style="font-size:13px;color:var(--text2)">Caricamento…</div>';
+    document.body.appendChild(s);
+  }
+  s.style.display = 'flex';
+}
+function hideSplash() {
+  const s = document.getElementById('splashScreen');
+  if (s) s.style.display = 'none';
+}
 
 function showSetup() {
   document.getElementById('setupScreen').style.display = 'flex';
@@ -392,17 +474,17 @@ function saveClientId() {
   CLIENT_ID = document.getElementById('clientIdInput').value.trim();
   localStorage.setItem(LS_CLIENT, CLIENT_ID);
   document.getElementById('setupScreen').style.display = 'none';
-  showLogin();
+  trySilentRefresh();
 }
 
 function resetClientId() {
   localStorage.removeItem(LS_CLIENT);
-  sessionStorage.removeItem(LS_TOKEN);
+  localStorage.removeItem(LS_TOKEN);
   CLIENT_ID = '';
   showSetup();
 }
 
-// ══ OAUTH 2.0 — Token (Implicit) flow via popup + postMessage ══
+// ══ OAUTH 2.0 — popup + postMessage ══
 function startOAuthFlow() {
   const redirectUri = location.href.split('#')[0].split('?')[0];
   const params = new URLSearchParams({
@@ -429,22 +511,30 @@ function handleOAuthMessage(event) {
   if (token) {
     accessToken = token;
     tokenExpiry = Date.now() + expiresIn * 1000;
-    sessionStorage.setItem(LS_TOKEN, JSON.stringify({ token, expiry: tokenExpiry }));
     showApp();
-    fetchUserInfo().then(() => loadFromDrive());
+    fetchUserInfo(true).then(() => loadFromDrive());
+    scheduleTokenRefresh(tokenExpiry);
   } else {
     showToast('❌ Login fallito — riprova');
   }
 }
 
-async function fetchUserInfo() {
+async function fetchUserInfo(save = false) {
   try {
     const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
       headers: { Authorization: 'Bearer ' + accessToken }
     });
     const u = await res.json();
-    document.getElementById('userName').textContent = (u.name || u.email || '').split(' ')[0];
-    document.getElementById('userAvatar').src = u.picture || '';
+    const userName = (u.name || u.email || '').split(' ')[0];
+    const userPic = u.picture || '';
+    document.getElementById('userName').textContent = userName;
+    document.getElementById('userAvatar').src = userPic;
+    if (save) {
+      // Salva token + info utente in localStorage così persiste tra sessioni
+      localStorage.setItem(LS_TOKEN, JSON.stringify({
+        token: accessToken, expiry: tokenExpiry, userName, userPic
+      }));
+    }
   } catch(e) {}
 }
 
@@ -455,7 +545,7 @@ function showApp() {
 
 function signOut() {
   if (!confirm('Disconnettersi da Google?')) return;
-  sessionStorage.removeItem(LS_TOKEN);
+  localStorage.removeItem(LS_TOKEN);
   accessToken = '';
   orders = [];
   driveFileId = '';
