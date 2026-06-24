@@ -382,10 +382,18 @@ select option{background:var(--s2)}
     </div>
     <div class="fs">
       <div class="fs-t">Stampa</div>
+      <div class="fr">
+        <label class="fl">Materiale</label>
+        <select id="fMat" onchange="onMatChange()"><option value="">— Seleziona —</option></select>
+      </div>
+      <div id="fMatAltroWrap" style="display:none;margin-bottom:10px">
+        <label class="fl">Prezzo materiale (€/kg)</label>
+        <input type="number" id="fMatPrezzo" placeholder="es. 29.99" step="0.01" min="0" oninput="calcCostoMat()">
+      </div>
       <div class="fr3">
-        <div><label class="fl">Materiale</label><input type="text" id="fMat" placeholder="PLA…"></div>
-        <div><label class="fl">Quantità</label><input type="number" id="fQty" placeholder="1" min="0"></div>
-        <div><label class="fl">Peso (g)</label><input type="number" id="fPeso" placeholder="0" min="0"></div>
+        <div><label class="fl">Quantità pezzi</label><input type="number" id="fQty" placeholder="1" min="0"></div>
+        <div><label class="fl">Peso stampa (g)</label><input type="number" id="fPeso" placeholder="0" min="0" oninput="calcCostoMat()"></div>
+        <div><label class="fl">Costo mat. (€)</label><input type="number" id="fCostoMat" placeholder="auto" step="0.01" readonly style="background:var(--s3);color:var(--amber)"></div>
       </div>
       <div class="fr2">
         <div><label class="fl">Ore di stampa</label><input type="number" id="fOre" placeholder="0" step="0.5" min="0"></div>
@@ -395,7 +403,7 @@ select option{background:var(--s2)}
     <div class="fs">
       <div class="fs-t">Economia</div>
       <div class="fr3">
-        <div><label class="fl">Spese mat. (€)</label><input type="number" id="fSpese" placeholder="0.00" step="0.01" min="0"></div>
+        <div><label class="fl">Spese mat. (€) <span style="font-size:10px;color:var(--text3)">(auto dal peso)</span></label><input type="number" id="fSpese" placeholder="0.00" step="0.01" min="0" oninput="calcProf()"></div>
         <div><label class="fl">Totale fatt. (€)</label><input type="number" id="fTot" placeholder="0.00" step="0.01" min="0"></div>
         <div><label class="fl">Profitto (€)</label><input type="number" id="fProf" placeholder="auto" step="0.01" readonly style="background:var(--s3);color:var(--green)"></div>
       </div>
@@ -435,6 +443,30 @@ let nextId=1;
 let filt='tutti';
 let viewMode='card';
 let period='mese';
+
+// ── LISTINO MATERIALI BAMBU LAB (€/kg — store EU, giugno 2026) ──
+const MATERIALI = [
+  {id:'pla-basic',    nome:'PLA Basic',         prezzo:25.99},
+  {id:'pla-matte',    nome:'PLA Matte',          prezzo:25.99},
+  {id:'pla-silk',     nome:'PLA Silk',           prezzo:29.99},
+  {id:'pla-silk+',    nome:'PLA Silk+',          prezzo:34.99},
+  {id:'pla-cf',       nome:'PLA-CF',             prezzo:34.99},
+  {id:'pla-glow',     nome:'PLA Glow in Dark',   prezzo:34.99},
+  {id:'pla-sparkle',  nome:'PLA Sparkle',        prezzo:34.99},
+  {id:'pla-metal',    nome:'PLA Metal',          prezzo:34.99},
+  {id:'pla-pure',     nome:'PLA Pure',           prezzo:28.00},
+  {id:'petg-hf',      nome:'PETG HF',            prezzo:25.99},
+  {id:'petg-transl',  nome:'PETG Translucent',   prezzo:25.99},
+  {id:'petg-cf',      nome:'PETG-CF',            prezzo:34.99},
+  {id:'abs',          nome:'ABS',                prezzo:25.99},
+  {id:'asa',          nome:'ASA',                prezzo:27.99},
+  {id:'tpu-95a',      nome:'TPU 95A',            prezzo:29.99},
+  {id:'tpu-95a-hf',   nome:'TPU 95A HF',         prezzo:27.99},
+  {id:'pa6-cf',       nome:'PA6-CF',             prezzo:49.99},
+  {id:'paht-cf',      nome:'PAHT-CF',            prezzo:49.99},
+  {id:'pc',           nome:'PC',                 prezzo:39.99},
+  {id:'altro',        nome:'Altro (prezzo manuale)', prezzo:0},
+];
 
 // ── INIT ──
 window.addEventListener('load',()=>{
@@ -684,11 +716,44 @@ function openNew(){
   document.getElementById('fTitle').textContent='Nuovo ordine';
   document.getElementById('fId').value='';
   ['fNome','fTel','fEmail','fDesc','fOrdNum','fDataOrd','fDataCons','fMat','fFile','fNote'].forEach(id=>document.getElementById(id).value='');
-  ['fQty','fPeso','fOre','fSpese','fTot','fProf'].forEach(id=>document.getElementById(id).value='');
+  ['fQty','fPeso','fOre','fSpese','fTot','fProf','fCostoMat'].forEach(id=>document.getElementById(id).value='');document.getElementById('fMat').value='';document.getElementById('fMatAltroWrap').style.display='none';
   document.getElementById('fStato').value='preventivo';document.getElementById('fProgett').value='';
   document.getElementById('fOrdNum').placeholder='#'+nextId;
   openPanel('pForm');setTimeout(()=>document.getElementById('fNome').focus(),350);
 }
+// Popola select materiali all'avvio
+(function(){
+  const sel=document.getElementById('fMat');
+  MATERIALI.forEach(m=>{const o=document.createElement('option');o.value=m.id;o.textContent=m.prezzo>0?m.nome+' — €'+m.prezzo.toFixed(2)+'/kg':m.nome;sel.appendChild(o);});
+})();
+
+function onMatChange(){
+  const id=document.getElementById('fMat').value;
+  const mat=MATERIALI.find(m=>m.id===id);
+  const altroWrap=document.getElementById('fMatAltroWrap');
+  if(!mat){altroWrap.style.display='none';document.getElementById('fCostoMat').value='';return;}
+  if(mat.id==='altro'){altroWrap.style.display='block';}
+  else{altroWrap.style.display='none';calcCostoMat();}
+}
+
+function calcCostoMat(){
+  const id=document.getElementById('fMat').value;
+  const mat=MATERIALI.find(m=>m.id===id);
+  if(!mat)return;
+  const peso=parseFloat(document.getElementById('fPeso').value||0);
+  let prezzoKg=mat.prezzo;
+  if(mat.id==='altro') prezzoKg=parseFloat(document.getElementById('fMatPrezzo').value||0);
+  if(peso>0&&prezzoKg>0){
+    const costo=(peso/1000*prezzoKg).toFixed(2);
+    document.getElementById('fCostoMat').value=costo;
+    // Aggiorna automaticamente le spese se non già modificato manualmente
+    document.getElementById('fSpese').value=costo;
+    calcProf();
+  } else {
+    document.getElementById('fCostoMat').value='';
+  }
+}
+
 document.getElementById('fTot').addEventListener('input',calcProf);
 document.getElementById('fSpese').addEventListener('input',calcProf);
 function calcProf(){const t=parseFloat(document.getElementById('fTot').value||0),s=parseFloat(document.getElementById('fSpese').value||0);document.getElementById('fProf').value=(t>0||s>0)?(t-s).toFixed(2):'';}
@@ -703,7 +768,7 @@ function saveOrder(){
   const ordNum=document.getElementById('fOrdNum').value.trim()||String(nextId);
   const spese=parseFloat(document.getElementById('fSpese').value||0);
   const tot=parseFloat(document.getElementById('fTot').value||0);
-  const order={id,ts:existing?existing.ts:Date.now(),tsEdit:Date.now(),ordNum,nome,tel:document.getElementById('fTel').value.trim(),email:document.getElementById('fEmail').value.trim(),desc,stato:document.getElementById('fStato').value,dataOrd:document.getElementById('fDataOrd').value.trim(),dataCons:document.getElementById('fDataCons').value.trim(),progett:document.getElementById('fProgett').value,mat:document.getElementById('fMat').value.trim(),qty:document.getElementById('fQty').value,peso:document.getElementById('fPeso').value,ore:document.getElementById('fOre').value,file:document.getElementById('fFile').value.trim(),spese:spese||'',tot:tot||'',prof:(tot>0||spese>0)?(tot-spese).toFixed(2):'',note:document.getElementById('fNote').value.trim()};
+  const order={id,ts:existing?existing.ts:Date.now(),tsEdit:Date.now(),ordNum,nome,tel:document.getElementById('fTel').value.trim(),email:document.getElementById('fEmail').value.trim(),desc,stato:document.getElementById('fStato').value,dataOrd:document.getElementById('fDataOrd').value.trim(),dataCons:document.getElementById('fDataCons').value.trim(),progett:document.getElementById('fProgett').value,mat:(()=>{const id=document.getElementById('fMat').value;const m=MATERIALI.find(x=>x.id===id);return m?m.nome:id;})(),matId:document.getElementById('fMat').value,qty:document.getElementById('fQty').value,peso:document.getElementById('fPeso').value,ore:document.getElementById('fOre').value,file:document.getElementById('fFile').value.trim(),spese:spese||'',tot:tot||'',prof:(tot>0||spese>0)?(tot-spese).toFixed(2):'',note:document.getElementById('fNote').value.trim()};
   if(existing){Object.assign(existing,order);}else{orders.unshift(order);nextId=Math.max(nextId,parseInt(ordNum)||0)+1;}
   closeAll();renderHome();renderOrders();saveToDrive();
 }
@@ -739,7 +804,7 @@ function openEdit(id){
     document.getElementById('fTitle').textContent='Modifica ordine';
     document.getElementById('fId').value=id;
     ['fNome','fTel','fEmail','fDesc','fOrdNum','fDataOrd','fDataCons','fMat','fFile','fNote'].forEach(k=>document.getElementById(k).value=o[k.slice(1).toLowerCase()]||o[{fNome:'nome',fTel:'tel',fEmail:'email',fDesc:'desc',fOrdNum:'ordNum',fDataOrd:'dataOrd',fDataCons:'dataCons',fMat:'mat',fFile:'file',fNote:'note'}[k]]||'');
-    document.getElementById('fNome').value=o.nome||'';document.getElementById('fTel').value=o.tel||'';document.getElementById('fEmail').value=o.email||'';document.getElementById('fDesc').value=o.desc||'';document.getElementById('fOrdNum').value=o.ordNum||'';document.getElementById('fDataOrd').value=o.dataOrd||'';document.getElementById('fDataCons').value=o.dataCons||'';document.getElementById('fMat').value=o.mat||'';document.getElementById('fFile').value=o.file||'';document.getElementById('fNote').value=o.note||'';
+    document.getElementById('fNome').value=o.nome||'';document.getElementById('fTel').value=o.tel||'';document.getElementById('fEmail').value=o.email||'';document.getElementById('fDesc').value=o.desc||'';document.getElementById('fOrdNum').value=o.ordNum||'';document.getElementById('fDataOrd').value=o.dataOrd||'';document.getElementById('fDataCons').value=o.dataCons||'';const matId=o.matId||(MATERIALI.find(m=>m.nome===o.mat)||{id:''}).id;document.getElementById('fMat').value=matId;onMatChange();document.getElementById('fFile').value=o.file||'';document.getElementById('fNote').value=o.note||'';
     document.getElementById('fStato').value=o.stato||'preventivo';document.getElementById('fProgett').value=o.progett||'';
     document.getElementById('fQty').value=o.qty||'';document.getElementById('fPeso').value=o.peso||'';document.getElementById('fOre').value=o.ore||'';document.getElementById('fSpese').value=o.spese||'';document.getElementById('fTot').value=o.tot||'';document.getElementById('fProf').value=o.prof||'';
     openPanel('pForm');
