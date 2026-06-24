@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Stampa 3D — Gestione Ordini</title>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f4f3ef;--surface:#fff;--surface2:#eceae4;--border:rgba(0,0,0,.11);--border2:rgba(0,0,0,.2);
+  --text:#1a1a1a;--text2:#66665f;--text3:#aaa;
+  --accent:#1a56a0;--accent-bg:#e6f0fb;--accent-t:#0b3d78;
+  --green:#2d6e0f;--green-bg:#e6f5dc;
+  --red:#a32020;--red-bg:#fdeaea;
+  --amber:#7a4500;--amber-bg:#fdefd5;
+  --r:10px;--rs:6px
+}
+@media(prefers-color-scheme:dark){
+  :root{--bg:#181816;--surface:#222220;--surface2:#2b2b28;--border:rgba(255,255,255,.09);--border2:rgba(255,255,255,.18);
+  --text:#efefea;--text2:#9a9a94;--text3:#666;
+  --accent:#4a90d9;--accent-bg:#0c2240;--accent-t:#8fc2f0;
+  --green:#8ec94a;--green-bg:#162900;--red:#f08080;--red-bg:#3a0e0e;--amber:#f5b84a;--amber-bg:#3a1800}
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:15px}
+
+/* ── SETUP SCREEN ── */
+#setupScreen{position:fixed;inset:0;background:var(--bg);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center}
+.setup-logo{width:64px;height:64px;border-radius:16px;background:var(--accent);display:flex;align-items:center;justify-content:center;margin:0 auto 20px}
+.setup-title{font-size:22px;font-weight:700;margin-bottom:8px}
+.setup-sub{font-size:14px;color:var(--text2);margin-bottom:28px;line-height:1.6;max-width:340px}
+.setup-card{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r);padding:18px;text-align:left;width:100%;max-width:400px;margin-bottom:16px}
+.setup-step{display:flex;gap:12px;margin-bottom:12px;align-items:flex-start;font-size:13px;line-height:1.5;color:var(--text2)}
+.setup-step:last-child{margin-bottom:0}
+.step-num{width:22px;height:22px;border-radius:50%;background:var(--accent-bg);color:var(--accent-t);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+code{background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:12px;font-family:monospace}
+.setup-input-wrap{width:100%;max-width:400px;margin-bottom:14px}
+.setup-label{font-size:12px;color:var(--text2);margin-bottom:5px;text-align:left}
+.setup-input{width:100%;background:var(--surface);border:.5px solid var(--border2);border-radius:var(--rs);color:var(--text);font-family:monospace;font-size:13px;padding:11px 12px;outline:none}
+.setup-input:focus{border-color:var(--accent)}
+.btn-setup{background:var(--accent);color:#fff;border:none;border-radius:var(--rs);font-size:15px;font-weight:600;padding:13px 28px;cursor:pointer;width:100%;max-width:400px}
+.btn-setup:disabled{opacity:.5;cursor:not-allowed}
+
+/* ── LOGIN SCREEN ── */
+#loginScreen{position:fixed;inset:0;background:var(--bg);z-index:900;display:none;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center}
+.login-logo{width:56px;height:56px;border-radius:14px;background:var(--accent);display:flex;align-items:center;justify-content:center;margin:0 auto 16px}
+.login-title{font-size:20px;font-weight:700;margin-bottom:6px}
+.login-sub{font-size:13px;color:var(--text2);margin-bottom:24px;line-height:1.5}
+#gSignInBtn{display:inline-block}
+.sync-note{font-size:11px;color:var(--text3);margin-top:16px;line-height:1.5;max-width:280px}
+
+/* ── MAIN APP ── */
+#app{display:none}
+.hdr{background:var(--surface);border-bottom:.5px solid var(--border);padding:0 14px;position:sticky;top:0;z-index:100;height:54px;display:flex;align-items:center;gap:10px}
+.logo{width:34px;height:34px;border-radius:8px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.hdr-actions{display:flex;gap:6px;margin-left:auto;align-items:center}
+.sync-badge{font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;padding:5px 10px;background:var(--surface2);border-radius:20px;border:.5px solid var(--border)}
+.sync-badge.syncing{color:var(--accent)}
+.sync-badge.ok{color:var(--green)}
+.sync-badge.err{color:var(--red)}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:10px 10px 0}
+@media(max-width:500px){.stats{grid-template-columns:repeat(2,1fr)}}
+.sc{background:var(--surface);border-radius:var(--rs);border:.5px solid var(--border);padding:9px 10px;text-align:center}
+.sc-l{font-size:10px;color:var(--text2);margin-bottom:3px}
+.sc-v{font-size:18px;font-weight:700}
+.sc-v.g{color:var(--green)}.sc-v.b{color:var(--accent)}
+
+.tb{display:flex;gap:7px;padding:9px 10px}
+.sw{flex:1;position:relative}
+.sw svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text3);pointer-events:none}
+input[type=search],input[type=text],input[type=tel],input[type=number],textarea,select{background:var(--surface);border:.5px solid var(--border2);border-radius:var(--rs);color:var(--text);font-family:inherit;font-size:14px;padding:9px 10px;outline:none;width:100%;-webkit-appearance:none}
+input[type=search]{padding-left:32px}
+input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(74,144,217,.18)}
+textarea{resize:vertical;min-height:68px;line-height:1.5}
+.btn{background:var(--accent);color:#fff;border:none;border-radius:var(--rs);font-size:13px;font-weight:600;padding:9px 13px;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap;-webkit-tap-highlight-color:transparent}
+.btn:active{opacity:.82;transform:scale(.97)}
+.btn-sm{padding:7px 11px;font-size:12px}
+.btn-out{background:transparent;border:.5px solid var(--border2);color:var(--text);border-radius:var(--rs);font-size:13px;padding:9px 13px;cursor:pointer;display:flex;align-items:center;gap:5px}
+.btn-red{background:var(--red-bg);border:.5px solid var(--border);color:var(--red);border-radius:var(--rs);font-size:13px;padding:8px 12px;cursor:pointer}
+.btn-green{background:var(--green);color:#fff;border:none;border-radius:var(--rs);font-size:13px;font-weight:600;padding:9px 13px;cursor:pointer;display:flex;align-items:center;gap:5px}
+
+.chips{display:flex;gap:5px;padding:2px 10px 8px;overflow-x:auto;scrollbar-width:none}
+.chip{font-size:12px;padding:5px 13px;border-radius:20px;border:.5px solid var(--border2);background:var(--surface2);color:var(--text2);cursor:pointer;white-space:nowrap}
+.chip.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.list{padding:0 10px 120px;display:flex;flex-direction:column;gap:7px}
+.card{background:var(--surface);border-radius:var(--r);border:.5px solid var(--border);overflow:hidden;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.card:active{opacity:.88}
+.card-head{display:flex;align-items:center;gap:11px;padding:13px}
+.av{width:40px;height:40px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--accent-t);flex-shrink:0}
+.cn{font-size:15px;font-weight:600}
+.cm{font-size:12px;color:var(--text2);margin-top:2px}
+.badges{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+.badge{font-size:10px;font-weight:600;padding:3px 8px;border-radius:20px;white-space:nowrap}
+.bg{background:var(--green-bg);color:var(--green)}
+.ba{background:var(--amber-bg);color:var(--amber)}
+.bb{background:var(--accent-bg);color:var(--accent-t)}
+.br{background:var(--red-bg);color:var(--red)}
+.card-foot{border-top:.5px solid var(--border);padding:8px 13px;display:flex;gap:10px;font-size:11px;color:var(--text2);flex-wrap:wrap}
+.empty{text-align:center;padding:60px 20px;color:var(--text2)}
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:none}
+.ov.on{display:block}
+.panel{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-radius:18px 18px 0 0;z-index:300;max-height:93vh;overflow-y:auto;transform:translateY(100%);transition:transform .28s cubic-bezier(.32,0,0,1);-webkit-overflow-scrolling:touch}
+.panel.on{transform:translateY(0)}
+.ph-h{width:36px;height:4px;border-radius:2px;background:var(--border2);margin:9px auto 0}
+.ph{display:flex;align-items:center;justify-content:space-between;padding:15px 15px 10px}
+.ph h2{font-size:17px;font-weight:700}
+.ph-x{width:30px;height:30px;border-radius:50%;background:var(--surface2);border:none;cursor:pointer;color:var(--text);font-size:17px;display:flex;align-items:center;justify-content:center}
+.pb{padding:0 15px 36px}
+.fs{margin-bottom:18px}
+.fs-t{font-size:10px;font-weight:700;letter-spacing:.07em;color:var(--text2);text-transform:uppercase;margin-bottom:7px}
+.fr{margin-bottom:9px}
+.fl{font-size:12px;color:var(--text2);margin-bottom:3px;display:block}
+.fr2{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:9px}
+.fr3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:9px}
+@media(max-width:380px){.fr2,.fr3{grid-template-columns:1fr}}
+.ds{margin-bottom:18px}
+.dt{font-size:10px;font-weight:700;letter-spacing:.07em;color:var(--text2);text-transform:uppercase;margin-bottom:8px;padding-bottom:6px;border-bottom:.5px solid var(--border)}
+.dr{display:flex;justify-content:space-between;align-items:flex-start;padding:7px 0;border-bottom:.5px solid var(--border);gap:10px}
+.dr:last-child{border-bottom:none}
+.dk{font-size:13px;color:var(--text2)}
+.dv{font-size:14px;font-weight:500;text-align:right}
+.profit-box{background:var(--green-bg);border-radius:var(--r);padding:13px 15px;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.profit-l{font-size:12px;color:var(--green)}
+.profit-v{font-size:24px;font-weight:800;color:var(--green)}
+.note-box{background:var(--amber-bg);border-radius:var(--rs);padding:10px 12px;font-size:13px;color:var(--amber);white-space:pre-wrap;line-height:1.5}
+.ar{display:flex;gap:7px;margin-top:18px;flex-wrap:wrap}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:#222;color:#fff;font-size:13px;font-weight:500;padding:10px 20px;border-radius:30px;z-index:500;opacity:0;transition:all .3s;white-space:nowrap;max-width:90vw;text-align:center}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+.vtoggle{display:flex;gap:5px}
+.vtbtn{background:var(--surface2);border:.5px solid var(--border);border-radius:var(--rs);padding:7px 10px;cursor:pointer;color:var(--text2);font-size:13px;line-height:1}
+.vtbtn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.tbl-wrap{overflow-x:auto;margin-bottom:10px;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{background:var(--surface2);color:var(--text2);font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:8px 10px;text-align:left;border-bottom:.5px solid var(--border);white-space:nowrap}
+td{padding:9px 10px;border-bottom:.5px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--surface2)}
+.tr{text-align:right}
+a.phl{color:var(--accent);text-decoration:none;font-weight:500}
+.user-chip{display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--surface2);border-radius:20px;border:.5px solid var(--border);font-size:11px;color:var(--text2);cursor:pointer}
+.user-chip img{width:20px;height:20px;border-radius:50%}
+</style>
+</head>
+<body>
+
+<!-- ══ SETUP SCREEN ══ -->
+<div id="setupScreen">
+  <div class="setup-logo">
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+  </div>
+  <div class="setup-title">Configurazione iniziale</div>
+  <div class="setup-sub">Per sincronizzare con Google Drive serve un Client ID OAuth gratuito. Si fa una volta sola in 3 minuti.</div>
+
+  <div class="setup-card">
+    <div class="setup-step">
+      <div class="step-num">1</div>
+      <div>Vai su <a href="https://console.cloud.google.com" target="_blank" style="color:var(--accent)">console.cloud.google.com</a> → crea un progetto (es. <em>Stampa3D</em>)</div>
+    </div>
+    <div class="setup-step">
+      <div class="step-num">2</div>
+      <div>Menu → <strong>API e servizi</strong> → <strong>Libreria</strong> → cerca <em>Google Drive API</em> → <strong>Abilita</strong></div>
+    </div>
+    <div class="setup-step">
+      <div class="step-num">3</div>
+      <div><strong>Credenziali</strong> → <strong>Crea credenziali</strong> → <strong>ID client OAuth</strong> → tipo <code>Applicazione web</code></div>
+    </div>
+    <div class="setup-step">
+      <div class="step-num">4</div>
+      <div>In <em>Origini JavaScript autorizzate</em> aggiungi <code>http://localhost:8080</code>. In <em>URI di reindirizzamento autorizzati</em> aggiungi <code>http://localhost:8080/stampa3d_drive.html</code>. Copia l'<strong>ID client</strong>.</div>
+    </div>
+    <div class="setup-step">
+      <div class="step-num">5</div>
+      <div>Vai su <strong>Schermata consenso OAuth</strong> → aggiungi la tua email come <em>utente di test</em></div>
+    </div>
+  </div>
+
+  <div class="setup-input-wrap">
+    <div class="setup-label">Incolla qui il tuo Client ID Google OAuth:</div>
+    <input class="setup-input" id="clientIdInput" type="text" placeholder="000000000000-xxxxxxxxxxxxxxxx.apps.googleusercontent.com" oninput="checkClientId()">
+  </div>
+  <button class="btn-setup" id="btnSetup" disabled onclick="saveClientId()">Salva e inizia →</button>
+  <p style="font-size:11px;color:var(--text3);margin-top:12px;max-width:360px;line-height:1.5">Il Client ID viene salvato solo su questo dispositivo (localStorage). Non viene mai inviato a nessun server.</p>
+</div>
+
+<!-- ══ LOGIN SCREEN ══ -->
+<div id="loginScreen">
+  <div class="login-logo">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+  </div>
+  <div class="login-title">Stampa 3D</div>
+  <div class="login-sub">Accedi con Google per sincronizzare<br>automaticamente i tuoi ordini su Drive.</div>
+  <button class="btn-setup" id="btnGoogleLogin" onclick="startOAuthFlow()" style="display:flex;align-items:center;justify-content:center;gap:10px;max-width:280px;margin:0 auto">
+    <svg width="18" height="18" viewBox="0 0 24 24" style="flex-shrink:0"><path fill="#fff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#fff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#fff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#fff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    Accedi con Google
+  </button>
+  <div class="sync-note" style="margin-top:16px">I dati vengono salvati nel tuo Google Drive come file <code style="background:rgba(0,0,0,.08);padding:1px 4px;border-radius:3px">dati_stampa3d.json</code>. Solo tu puoi vederli.</div>
+  <button class="btn-out" style="margin-top:16px;font-size:12px" onclick="resetClientId()">↩ Cambia Client ID</button>
+</div>
+
+<!-- ══ MAIN APP ══ -->
+<div id="app">
+  <header class="hdr">
+    <div class="logo">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+    </div>
+    <div><div style="font-size:16px;font-weight:700;line-height:1.2">Stampa 3D</div><div style="font-size:11px;color:var(--text2)">Gestione Ordini</div></div>
+    <div class="hdr-actions">
+      <div class="sync-badge" id="syncBadge">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        <span id="syncLabel">In attesa</span>
+      </div>
+      <div class="user-chip" id="userChip" onclick="signOut()">
+        <img id="userAvatar" src="" alt="">
+        <span id="userName"></span>
+        <span style="color:var(--text3)">✕</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="stats" id="statsBar"></div>
+
+  <div class="tb">
+    <div class="sw">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input type="search" id="searchInput" placeholder="Cerca cliente, ordine…" oninput="render()">
+    </div>
+    <button class="btn btn-sm" onclick="openNew()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+      Nuovo
+    </button>
+  </div>
+
+  <div style="display:flex;align-items:center;padding:0 10px 6px;gap:6px">
+    <div class="chips" style="flex:1;padding:0">
+      <div class="chip on" onclick="setF('tutti',this)">Tutti</div>
+      <div class="chip" onclick="setF('in corso',this)">In corso</div>
+      <div class="chip" onclick="setF('completato',this)">Completati</div>
+      <div class="chip" onclick="setF('preventivo',this)">Preventivi</div>
+      <div class="chip" onclick="setF('in attesa',this)">In attesa</div>
+    </div>
+    <div class="vtoggle">
+      <button class="vtbtn on" id="btnCard" onclick="setView('card')">≡</button>
+      <button class="vtbtn" id="btnTable" onclick="setView('table')">⊞</button>
+    </div>
+  </div>
+
+  <div class="list" id="mainList"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="ov" id="ov" onclick="closeAll()"></div>
+
+<!-- PANEL FORM -->
+<div class="panel" id="pForm">
+  <div class="ph-h"></div>
+  <div class="ph"><h2 id="fTitle">Nuovo ordine</h2><button class="ph-x" onclick="closeAll()">✕</button></div>
+  <div class="pb">
+    <input type="hidden" id="fId">
+    <div class="fs">
+      <div class="fs-t">Cliente</div>
+      <div class="fr"><label class="fl">Nome e cognome *</label><input type="text" id="fNome" placeholder="Es. Mario Rossi"></div>
+      <div class="fr2">
+        <div><label class="fl">Telefono</label><input type="tel" id="fTel" placeholder="+39 333…"></div>
+        <div><label class="fl">Email</label><input type="text" id="fEmail" placeholder="mario@…"></div>
+      </div>
+    </div>
+    <div class="fs">
+      <div class="fs-t">Ordine</div>
+      <div class="fr"><label class="fl">Descrizione prodotto *</label><input type="text" id="fDesc" placeholder="Es. Supporto porta cavi personalizzato"></div>
+      <div class="fr2">
+        <div><label class="fl">N° ordine</label><input type="text" id="fOrdNum" placeholder="Auto"></div>
+        <div><label class="fl">Stato</label>
+          <select id="fStato"><option value="preventivo">Preventivo</option><option value="in corso">In corso</option><option value="in attesa">In attesa materiale</option><option value="completato">Completato</option></select>
+        </div>
+      </div>
+      <div class="fr2">
+        <div><label class="fl">Data ordine</label><input type="text" id="fDataOrd" placeholder="gg/mm/aaaa"></div>
+        <div><label class="fl">Data consegna</label><input type="text" id="fDataCons" placeholder="gg/mm/aaaa"></div>
+      </div>
+      <div class="fr"><label class="fl">Da progettare?</label>
+        <select id="fProgett"><option value="">No</option><option value="si">Sì</option></select>
+      </div>
+    </div>
+    <div class="fs">
+      <div class="fs-t">Stampa</div>
+      <div class="fr3">
+        <div><label class="fl">Materiale</label><input type="text" id="fMat" placeholder="PLA, PETG…"></div>
+        <div><label class="fl">Quantità</label><input type="number" id="fQty" placeholder="1" min="0"></div>
+        <div><label class="fl">Peso tot (g)</label><input type="number" id="fPeso" placeholder="0" min="0"></div>
+      </div>
+      <div class="fr2">
+        <div><label class="fl">Ore di stampa</label><input type="number" id="fOre" placeholder="0" step="0.5" min="0"></div>
+        <div><label class="fl">File STL</label><input type="text" id="fFile" placeholder="nome_file.stl"></div>
+      </div>
+    </div>
+    <div class="fs">
+      <div class="fs-t">Economia</div>
+      <div class="fr3">
+        <div><label class="fl">Spese materiale (€)</label><input type="number" id="fSpese" placeholder="0.00" step="0.01" min="0"></div>
+        <div><label class="fl">Totale fatturato (€)</label><input type="number" id="fTot" placeholder="0.00" step="0.01" min="0"></div>
+        <div><label class="fl">Profitto (€)</label><input type="number" id="fProf" placeholder="auto" step="0.01" readonly style="background:var(--surface2)"></div>
+      </div>
+    </div>
+    <div class="fs">
+      <div class="fs-t">Note</div>
+      <div class="fr"><textarea id="fNote" placeholder="Colore, infill, parametri particolari…"></textarea></div>
+    </div>
+    <button class="btn-green" style="width:100%;justify-content:center;padding:14px;font-size:15px" onclick="saveOrder()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.3"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      Salva e sincronizza su Drive
+    </button>
+  </div>
+</div>
+
+<!-- PANEL DETAIL -->
+<div class="panel" id="pDetail">
+  <div class="ph-h"></div>
+  <div class="ph"><h2 id="dTitle">Dettaglio</h2><button class="ph-x" onclick="closeAll()">✕</button></div>
+  <div class="pb" id="dBody"></div>
+</div>
+
+<script>
+// ══ CONFIG ══
+const SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+const FILE_NAME = 'dati_stampa3d.json';
+const LS_CLIENT = 'stampa3d_clientId';
+const LS_DATA   = 'stampa3d_v3';
+const LS_FILEID = 'stampa3d_driveFileId';
+const LS_TOKEN  = 'stampa3d_token';
+
+let CLIENT_ID = localStorage.getItem(LS_CLIENT) || '';
+let accessToken = '';
+let tokenExpiry = 0;
+let driveFileId = localStorage.getItem(LS_FILEID) || '';
+let orders = [];
+let nextId = 1;
+let filt = 'tutti';
+let viewMode = 'card';
+
+// ══ INIT FLOW ══
+window.addEventListener('load', () => {
+  // Se questa finestra è un popup OAuth, comunica il token al padre e chiuditi
+  if (window.opener && window.opener !== window) {
+    const hash = window.location.hash;
+    if (hash && hash.includes('access_token')) {
+      window.opener.postMessage({ type: 'oauth_token', hash }, window.location.origin);
+      window.close();
+      return;
+    }
+    window.close();
+    return;
+  }
+
+  if (!CLIENT_ID) { showSetup(); return; }
+
+  // Prova a ripristinare il token di sessione
+  try {
+    const saved = sessionStorage.getItem(LS_TOKEN);
+    if (saved) {
+      const { token, expiry } = JSON.parse(saved);
+      if (expiry > Date.now() + 60000) {
+        accessToken = token;
+        tokenExpiry = expiry;
+        showApp();
+        fetchUserInfo().then(() => loadFromDrive());
+        return;
+      }
+    }
+  } catch(e) {}
+  showLogin();
+});
+
+function showSetup() {
+  document.getElementById('setupScreen').style.display = 'flex';
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'none';
+}
+
+function showLogin() {
+  document.getElementById('setupScreen').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+}
+
+function checkClientId() {
+  const v = document.getElementById('clientIdInput').value.trim();
+  document.getElementById('btnSetup').disabled = v.length < 20;
+}
+
+function saveClientId() {
+  CLIENT_ID = document.getElementById('clientIdInput').value.trim();
+  localStorage.setItem(LS_CLIENT, CLIENT_ID);
+  document.getElementById('setupScreen').style.display = 'none';
+  showLogin();
+}
+
+function resetClientId() {
+  localStorage.removeItem(LS_CLIENT);
+  sessionStorage.removeItem(LS_TOKEN);
+  CLIENT_ID = '';
+  showSetup();
+}
+
+// ══ OAUTH 2.0 — Token (Implicit) flow via popup + postMessage ══
+function startOAuthFlow() {
+  const redirectUri = location.href.split('#')[0].split('?')[0];
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: redirectUri,
+    response_type: 'token',
+    scope: SCOPE + ' https://www.googleapis.com/auth/userinfo.profile',
+    prompt: 'select_account',
+  });
+  const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+  const w = 500, h = 600;
+  const left = Math.round((screen.width - w) / 2);
+  const top = Math.round((screen.height - h) / 2);
+  window.open(authUrl, 'googleauth', `width=${w},height=${h},left=${left},top=${top},menubar=no,toolbar=no`);
+  window.addEventListener('message', handleOAuthMessage, { once: true });
+}
+
+function handleOAuthMessage(event) {
+  if (event.origin !== location.origin) return;
+  if (!event.data || event.data.type !== 'oauth_token') return;
+  const params = new URLSearchParams(event.data.hash.slice(1));
+  const token = params.get('access_token');
+  const expiresIn = parseInt(params.get('expires_in') || '3600');
+  if (token) {
+    accessToken = token;
+    tokenExpiry = Date.now() + expiresIn * 1000;
+    sessionStorage.setItem(LS_TOKEN, JSON.stringify({ token, expiry: tokenExpiry }));
+    showApp();
+    fetchUserInfo().then(() => loadFromDrive());
+  } else {
+    showToast('❌ Login fallito — riprova');
+  }
+}
+
+async function fetchUserInfo() {
+  try {
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: 'Bearer ' + accessToken }
+    });
+    const u = await res.json();
+    document.getElementById('userName').textContent = (u.name || u.email || '').split(' ')[0];
+    document.getElementById('userAvatar').src = u.picture || '';
+  } catch(e) {}
+}
+
+function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+}
+
+function signOut() {
+  if (!confirm('Disconnettersi da Google?')) return;
+  sessionStorage.removeItem(LS_TOKEN);
+  accessToken = '';
+  orders = [];
+  driveFileId = '';
+  showLogin();
+}
+
+// ══ DATA ══
+function calcNextId() { return orders.reduce((m,o)=>Math.max(m,parseInt(o.ordNum)||0),0)+1; }
+function genId() { return Date.now().toString(36)+Math.random().toString(36).slice(2,5); }
+function ini(n) { return (n||'').trim().split(/\s+/).slice(0,2).map(w=>w[0]?.toUpperCase()||'').join(''); }
+function fm(n) { return parseFloat(n||0).toFixed(2).replace('.',','); }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function persist() { localStorage.setItem(LS_DATA, JSON.stringify({orders,nextId})); }
+
+// ══ DRIVE: LOAD ══
+async function loadFromDrive() {
+  setSyncStatus('syncing', '⏳ Caricamento…');
+  try {
+    // Search for existing file in appDataFolder
+    let fileId = driveFileId;
+    if (!fileId) {
+      const res = await fetch(
+        `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='${FILE_NAME}'&fields=files(id,name)`,
+        { headers: { Authorization: 'Bearer ' + accessToken } }
+      );
+      const data = await res.json();
+      if (data.files && data.files.length > 0) {
+        fileId = data.files[0].id;
+        driveFileId = fileId;
+        localStorage.setItem(LS_FILEID, fileId);
+      }
+    }
+
+    if (fileId) {
+      const res = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+        { headers: { Authorization: 'Bearer ' + accessToken } }
+      );
+      const d = await res.json();
+      orders = d.orders || [];
+      nextId = d.nextId || calcNextId();
+      persist();
+      setSyncStatus('ok', '✓ Sincronizzato');
+      showToast('✅ Dati caricati da Google Drive (' + orders.length + ' ordini)');
+    } else {
+      // No file yet — load from localStorage as fallback
+      try { const r=localStorage.getItem(LS_DATA); if(r){const d=JSON.parse(r);orders=d.orders||[];nextId=d.nextId||1;} } catch(e){}
+      setSyncStatus('ok', '✓ Pronto');
+      showToast('ℹ️ Nessun dato su Drive — inizia ad aggiungere ordini!');
+    }
+  } catch(e) {
+    // Fallback to localStorage
+    try { const r=localStorage.getItem(LS_DATA); if(r){const d=JSON.parse(r);orders=d.orders||[];nextId=d.nextId||1;} } catch(ex){}
+    setSyncStatus('err', '⚠ Offline');
+    showToast('⚠️ Impossibile connettersi a Drive — dati locali caricati');
+  }
+  renderStats();
+  render();
+}
+
+// ══ DRIVE: SAVE ══
+async function saveToDrive() {
+  if (!accessToken) { persist(); return; }
+  setSyncStatus('syncing', '⏳ Salvataggio…');
+  const body = JSON.stringify({ orders, nextId, savedAt: new Date().toISOString(), version: 3 }, null, 2);
+  try {
+    if (driveFileId) {
+      // Update existing
+      await fetch(
+        `https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`,
+        {
+          method: 'PATCH',
+          headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+          body
+        }
+      );
+    } else {
+      // Create new in appDataFolder
+      const meta = { name: FILE_NAME, parents: ['appDataFolder'] };
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
+      form.append('file', new Blob([body], { type: 'application/json' }));
+      const res = await fetch(
+        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
+        { method: 'POST', headers: { Authorization: 'Bearer ' + accessToken }, body: form }
+      );
+      const d = await res.json();
+      driveFileId = d.id;
+      localStorage.setItem(LS_FILEID, driveFileId);
+    }
+    persist();
+    setSyncStatus('ok', '✓ Salvato su Drive');
+    showToast('☁️ Salvato su Google Drive');
+  } catch(e) {
+    persist();
+    setSyncStatus('err', '⚠ Errore sync');
+    showToast('⚠️ Errore Drive — salvato in locale');
+  }
+}
+
+function setSyncStatus(type, label) {
+  const b = document.getElementById('syncBadge');
+  b.className = 'sync-badge ' + type;
+  document.getElementById('syncLabel').textContent = label;
+}
+
+// ══ STATS ══
+function renderStats() {
+  const comp = orders.filter(o=>o.stato==='completato');
+  const ricavi = comp.reduce((s,o)=>s+parseFloat(o.tot||0),0);
+  const utile = comp.reduce((s,o)=>s+parseFloat(o.prof||0),0);
+  const inCorso = orders.filter(o=>o.stato==='in corso').length;
+  document.getElementById('statsBar').innerHTML =
+    `<div class="sc"><div class="sc-l">Ordini tot</div><div class="sc-v b">${orders.length}</div></div>
+     <div class="sc"><div class="sc-l">In corso</div><div class="sc-v">${inCorso}</div></div>
+     <div class="sc"><div class="sc-l">Ricavi €</div><div class="sc-v g">${fm(ricavi)}</div></div>
+     <div class="sc"><div class="sc-l">Utile netto €</div><div class="sc-v g">${fm(utile)}</div></div>`;
+}
+
+// ══ FILTER / VIEW ══
+function setF(s,el){filt=s;document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));el.classList.add('on');render();}
+function setView(v){viewMode=v;document.getElementById('btnCard').classList.toggle('on',v==='card');document.getElementById('btnTable').classList.toggle('on',v==='table');render();}
+
+// ══ RENDER ══
+function render() {
+  const q=(document.getElementById('searchInput').value||'').toLowerCase();
+  let list=orders;
+  if(filt!=='tutti') list=list.filter(o=>o.stato===filt);
+  if(q) list=list.filter(o=>(o.nome+o.tel+o.desc+o.mat+o.ordNum).toLowerCase().includes(q));
+  list=[...list].sort((a,b)=>(b.ts||0)-(a.ts||0));
+  const el=document.getElementById('mainList');
+  if(!list.length){el.innerHTML='<div class="empty"><p>Nessun ordine trovato.</p></div>';return;}
+  if(viewMode==='table') renderTable(list,el); else renderCards(list,el);
+}
+
+function sbadge(s){
+  const m={'completato':['bg','Completato'],'in corso':['bb','In corso'],'preventivo':['ba','Preventivo'],'in attesa':['br','In attesa']};
+  const[c,l]=m[s]||['ba',s];
+  return `<span class="badge ${c}">${l}</span>`;
+}
+
+function renderCards(list,el){
+  el.innerHTML=list.map(o=>{
+    const prof=parseFloat(o.prof||0);
+    const pb=o.stato==='completato'&&prof>0?`<span class="badge bg">+€${fm(prof)}</span>`:'';
+    return `<div class="card" onclick="openDetail('${o.id}')">
+      <div class="card-head">
+        <div class="av">${ini(o.nome)}</div>
+        <div style="flex:1;min-width:0"><div class="cn">${esc(o.nome)}</div><div class="cm">#${esc(o.ordNum)} · ${esc(o.desc||'—')}</div></div>
+        <div class="badges">${sbadge(o.stato)}${pb}</div>
+      </div>
+      <div class="card-foot">
+        ${o.tel?`<span>📞 ${esc(o.tel)}</span>`:''}
+        ${o.mat?`<span>🖨 ${esc(o.mat)}${o.peso?' '+o.peso+'g':''}</span>`:''}
+        ${o.tot?`<span>€${fm(o.tot)}</span>`:''}
+        ${o.dataOrd?`<span>${esc(o.dataOrd)}</span>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderTable(list,el){
+  el.innerHTML=`<div class="tbl-wrap"><table>
+    <thead><tr><th>#</th><th>Cliente</th><th>Tel</th><th>Descrizione</th><th>Stato</th><th>Data ord.</th><th>Consegna</th><th>Mat.</th><th class="tr">Peso(g)</th><th class="tr">Ore</th><th class="tr">Spese</th><th class="tr">Totale</th><th class="tr">Profitto</th></tr></thead>
+    <tbody>${list.map(o=>`<tr onclick="openDetail('${o.id}')" style="cursor:pointer">
+      <td style="font-weight:600;color:var(--accent)">${esc(o.ordNum)}</td>
+      <td style="white-space:nowrap">${esc(o.nome)}</td>
+      <td><a class="phl" href="tel:${esc(o.tel)}" onclick="event.stopPropagation()">${esc(o.tel)}</a></td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(o.desc)}</td>
+      <td>${sbadge(o.stato)}</td>
+      <td style="white-space:nowrap">${esc(o.dataOrd)}</td>
+      <td style="white-space:nowrap">${esc(o.dataCons)}</td>
+      <td>${esc(o.mat)}</td>
+      <td class="tr">${o.peso||''}</td>
+      <td class="tr">${o.ore||''}</td>
+      <td class="tr">${o.spese?'€'+fm(o.spese):''}</td>
+      <td class="tr" style="font-weight:600">${o.tot?'€'+fm(o.tot):''}</td>
+      <td class="tr" style="color:var(--green);font-weight:700">${o.prof?'+€'+fm(o.prof):''}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+
+// ══ PANELS ══
+function openPanel(id){document.getElementById('ov').classList.add('on');document.getElementById(id).classList.add('on');document.body.style.overflow='hidden';}
+function closeAll(){document.getElementById('ov').classList.remove('on');['pForm','pDetail'].forEach(id=>document.getElementById(id).classList.remove('on'));document.body.style.overflow='';}
+
+// ══ NEW ══
+function openNew(){
+  document.getElementById('fTitle').textContent='Nuovo ordine';
+  document.getElementById('fId').value='';
+  ['fNome','fTel','fEmail','fDesc','fOrdNum','fDataOrd','fDataCons','fMat','fFile','fNote'].forEach(id=>document.getElementById(id).value='');
+  ['fQty','fPeso','fOre','fSpese','fTot','fProf'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('fStato').value='preventivo';
+  document.getElementById('fProgett').value='';
+  document.getElementById('fOrdNum').placeholder='#'+nextId;
+  openPanel('pForm');
+  setTimeout(()=>document.getElementById('fNome').focus(),350);
+}
+
+document.getElementById('fTot').addEventListener('input',calcProf);
+document.getElementById('fSpese').addEventListener('input',calcProf);
+function calcProf(){
+  const t=parseFloat(document.getElementById('fTot').value||0);
+  const s=parseFloat(document.getElementById('fSpese').value||0);
+  document.getElementById('fProf').value=(t>0||s>0)?(t-s).toFixed(2):'';
+}
+
+// ══ SAVE ORDER ══
+function saveOrder(){
+  const nome=document.getElementById('fNome').value.trim();
+  const desc=document.getElementById('fDesc').value.trim();
+  if(!nome){alert('Inserisci il nome del cliente.');return;}
+  if(!desc){alert('Inserisci la descrizione del prodotto.');return;}
+  const id=document.getElementById('fId').value||genId();
+  const existing=orders.find(o=>o.id===id);
+  const ordNum=document.getElementById('fOrdNum').value.trim()||String(nextId);
+  const spese=parseFloat(document.getElementById('fSpese').value||0);
+  const tot=parseFloat(document.getElementById('fTot').value||0);
+  const order={
+    id,ts:existing?existing.ts:Date.now(),tsEdit:Date.now(),
+    ordNum,nome,
+    tel:document.getElementById('fTel').value.trim(),
+    email:document.getElementById('fEmail').value.trim(),
+    desc,stato:document.getElementById('fStato').value,
+    dataOrd:document.getElementById('fDataOrd').value.trim(),
+    dataCons:document.getElementById('fDataCons').value.trim(),
+    progett:document.getElementById('fProgett').value,
+    mat:document.getElementById('fMat').value.trim(),
+    qty:document.getElementById('fQty').value,
+    peso:document.getElementById('fPeso').value,
+    ore:document.getElementById('fOre').value,
+    file:document.getElementById('fFile').value.trim(),
+    spese:spese||'',tot:tot||'',
+    prof:(tot>0||spese>0)?(tot-spese).toFixed(2):'',
+    note:document.getElementById('fNote').value.trim(),
+  };
+  if(existing){Object.assign(existing,order);}else{orders.unshift(order);nextId=Math.max(nextId,parseInt(ordNum)||0)+1;}
+  closeAll();
+  render();
+  renderStats();
+  saveToDrive();
+}
+
+// ══ DETAIL ══
+function openDetail(id){
+  const o=orders.find(x=>x.id===id);
+  if(!o) return;
+  const prof=parseFloat(o.prof||0);
+  let h=`<div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+    <div class="av" style="width:48px;height:48px;font-size:16px">${ini(o.nome)}</div>
+    <div>
+      <div style="font-size:18px;font-weight:700">${esc(o.nome)}</div>
+      ${o.tel?`<a class="phl" href="tel:${esc(o.tel)}" style="font-size:14px">📞 ${esc(o.tel)}</a>`:''}
+      ${o.email?`<div style="font-size:12px;color:var(--text2);margin-top:2px">${esc(o.email)}</div>`:''}
+    </div>
+    <div style="margin-left:auto">${sbadge(o.stato)}</div>
+  </div>`;
+  if(o.tot||o.prof){
+    h+=`<div class="profit-box"><div><div class="profit-l">Profitto netto</div><div style="font-size:11px;color:var(--green);margin-top:2px">Totale − spese</div></div><div class="profit-v">${prof>=0?'+':''}€${fm(prof)}</div></div>`;
+  }
+  h+=`<div class="ds"><div class="dt">Ordine #${esc(o.ordNum)}</div>
+    <div class="dr"><span class="dk">Prodotto</span><span class="dv">${esc(o.desc)}</span></div>
+    ${o.dataOrd?`<div class="dr"><span class="dk">Data ordine</span><span class="dv">${esc(o.dataOrd)}</span></div>`:''}
+    ${o.dataCons?`<div class="dr"><span class="dk">Consegna</span><span class="dv">${esc(o.dataCons)}</span></div>`:''}
+    ${o.progett?`<div class="dr"><span class="dk">Da progettare</span><span class="dv">Sì</span></div>`:''}
+    ${o.qty?`<div class="dr"><span class="dk">Quantità</span><span class="dv">${esc(o.qty)}</span></div>`:''}
+  </div>`;
+  if(o.mat||o.peso||o.ore||o.file){
+    h+=`<div class="ds"><div class="dt">Stampa</div>
+      ${o.mat?`<div class="dr"><span class="dk">Materiale</span><span class="dv">${esc(o.mat)}</span></div>`:''}
+      ${o.peso?`<div class="dr"><span class="dk">Peso totale</span><span class="dv">${esc(o.peso)} g</span></div>`:''}
+      ${o.ore?`<div class="dr"><span class="dk">Ore di stampa</span><span class="dv">${esc(o.ore)} h</span></div>`:''}
+      ${o.file?`<div class="dr"><span class="dk">File STL</span><span class="dv" style="font-family:monospace;font-size:12px">${esc(o.file)}</span></div>`:''}
+    </div>`;
+  }
+  if(o.spese||o.tot){
+    h+=`<div class="ds"><div class="dt">Economia</div>
+      ${o.spese?`<div class="dr"><span class="dk">Spese materiale</span><span class="dv">€${fm(o.spese)}</span></div>`:''}
+      ${o.tot?`<div class="dr"><span class="dk">Totale fatturato</span><span class="dv" style="font-weight:700">€${fm(o.tot)}</span></div>`:''}
+      ${o.prof?`<div class="dr"><span class="dk">Profitto</span><span class="dv" style="color:var(--green);font-weight:700">+€${fm(o.prof)}</span></div>`:''}
+    </div>`;
+  }
+  if(o.note){h+=`<div class="ds"><div class="dt">Note</div><div class="note-box">${esc(o.note)}</div></div>`;}
+  h+=`<div class="ar">
+    <button class="btn" style="flex:1;justify-content:center" onclick="openEdit('${o.id}')">✏️ Modifica</button>
+    <button class="btn-red" onclick="delOrder('${o.id}')">🗑 Elimina</button>
+  </div>`;
+  document.getElementById('dTitle').textContent=o.nome;
+  document.getElementById('dBody').innerHTML=h;
+  openPanel('pDetail');
+}
+
+function openEdit(id){
+  const o=orders.find(x=>x.id===id);
+  if(!o) return;
+  closeAll();
+  setTimeout(()=>{
+    document.getElementById('fTitle').textContent='Modifica ordine';
+    document.getElementById('fId').value=id;
+    document.getElementById('fNome').value=o.nome||'';
+    document.getElementById('fTel').value=o.tel||'';
+    document.getElementById('fEmail').value=o.email||'';
+    document.getElementById('fDesc').value=o.desc||'';
+    document.getElementById('fOrdNum').value=o.ordNum||'';
+    document.getElementById('fStato').value=o.stato||'preventivo';
+    document.getElementById('fDataOrd').value=o.dataOrd||'';
+    document.getElementById('fDataCons').value=o.dataCons||'';
+    document.getElementById('fProgett').value=o.progett||'';
+    document.getElementById('fMat').value=o.mat||'';
+    document.getElementById('fQty').value=o.qty||'';
+    document.getElementById('fPeso').value=o.peso||'';
+    document.getElementById('fOre').value=o.ore||'';
+    document.getElementById('fFile').value=o.file||'';
+    document.getElementById('fSpese').value=o.spese||'';
+    document.getElementById('fTot').value=o.tot||'';
+    document.getElementById('fProf').value=o.prof||'';
+    document.getElementById('fNote').value=o.note||'';
+    openPanel('pForm');
+  },240);
+}
+
+function delOrder(id){
+  if(!confirm('Eliminare questo ordine?')) return;
+  orders=orders.filter(o=>o.id!==id);
+  closeAll();render();renderStats();
+  saveToDrive();
+  showToast('🗑 Ordine eliminato');
+}
+
+// ══ TOAST ══
+let toastTm;
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(toastTm);
+  toastTm=setTimeout(()=>t.classList.remove('show'),3400);
+}
+</script>
+</body>
+</html>
