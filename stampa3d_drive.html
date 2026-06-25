@@ -350,11 +350,7 @@ select option{background:var(--s2)}
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
         <input type="search" id="contactSearch" placeholder="Cerca per nome o telefono…" oninput="renderContacts()">
       </div>
-      <div class="contacts-empty" id="contactsEmpty" style="display:none">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="1.5" style="margin-bottom:12px"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-        <div>Cerca un nome per trovare il cliente</div>
-        <div style="font-size:12px;color:var(--text3);margin-top:6px">I clienti appaiono quando cerchi</div>
-      </div>
+      <div class="contacts-empty" id="contactsEmpty" style="display:none"></div>
       <div class="contacts-grid" id="contactsGrid"></div>
     </div>
   </div>
@@ -624,7 +620,15 @@ async function loadFromDrive(){
       if(r.files&&r.files.length>0){fid=r.files[0].id;driveFileId=fid;localStorage.setItem(LS_FILEID,fid);}
     }
     if(fid){const d=await(await fetch(`https://www.googleapis.com/drive/v3/files/${fid}?alt=media`,{headers:{Authorization:'Bearer '+accessToken}})).json();
-      orders=d.orders||[];nextId=d.nextId||calcNextId();persist();setSyncStatus('ok','✓ Sincronizzato');showToast('✅ '+orders.length+' ordini caricati da Drive');
+      orders=d.orders||[];nextId=d.nextId||calcNextId();
+      // Migrazione: ricalcola prof se è stringa vuota o NaN
+      orders.forEach(o=>{
+        const t=Number(o.tot)||0;const s=Number(o.spese)||0;
+        if(o.prof===''||o.prof===null||isNaN(Number(o.prof))){o.prof=t>0||s>0?t-s:0;}
+        else{o.prof=Number(o.prof)||0;}
+        o.tot=t; o.spese=s;
+      });
+      persist();setSyncStatus('ok','✓ Sincronizzato');showToast('✅ '+orders.length+' ordini caricati da Drive');
     }else{tryLocalFallback();setSyncStatus('ok','✓ Pronto');showToast('ℹ️ Nessun dato su Drive — inizia ad aggiungere ordini!');}
   }catch(e){tryLocalFallback();setSyncStatus('err','⚠ Offline');showToast('⚠️ Drive non raggiungibile — dati locali');}
   renderHome();renderOrders();
@@ -671,8 +675,8 @@ function filterByPeriod(arr){
 function renderHome(){
   const filtered=filterByPeriod(orders);
   const comp=filtered.filter(o=>o.stato==='completato');
-  const ricavi=comp.reduce((s,o)=>s+parseFloat(o.tot||0),0);
-  const utile=comp.reduce((s,o)=>s+parseFloat(o.prof||0),0);
+  const ricavi=comp.reduce((s,o)=>s+(Number(o.tot)||0),0);
+  const utile=comp.reduce((s,o)=>s+(Number(o.prof)||0),0);
   const attivi=orders.filter(o=>o.stato==='in corso'||o.stato==='in attesa').length;
   const margine=ricavi>0?Math.round(utile/ricavi*100):null;
   document.getElementById('homeUtile').textContent='€'+fm(utile);
@@ -748,15 +752,21 @@ function renderContacts(){
   const q=(document.getElementById('contactSearch').value||'').toLowerCase().trim();
   const grid=document.getElementById('contactsGrid');
   const empty=document.getElementById('contactsEmpty');
-  if(!q){grid.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
   const clients={};
-  orders.forEach(o=>{if(!o.nome)return;const k=o.nome.toLowerCase();if(k.includes(q)||((o.tel||'').toLowerCase().includes(q))){if(!clients[o.nome])clients[o.nome]={nome:o.nome,tel:o.tel||'',email:o.email||'',orders:[]};clients[o.nome].orders.push(o);}});
-  const list=Object.values(clients);
-  if(!list.length){grid.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--text2)">Nessun cliente trovato.</div>';return;}
+  orders.forEach(o=>{
+    if(!o.nome)return;
+    const match=!q||o.nome.toLowerCase().includes(q)||(o.tel||'').toLowerCase().includes(q);
+    if(match){
+      if(!clients[o.nome])clients[o.nome]={nome:o.nome,tel:o.tel||'',email:o.email||'',orders:[]};
+      clients[o.nome].orders.push(o);
+    }
+  });
+  const list=Object.values(clients).sort((a,b)=>a.nome.localeCompare(b.nome,'it'));
+  if(!list.length){grid.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--text2)">'+(q?'Nessun cliente trovato.':'Nessun cliente ancora.')+'</div>';return;}
   grid.innerHTML=list.map(c=>{
     const comp=c.orders.filter(o=>o.stato==='completato');
-    const utile=comp.reduce((s,o)=>s+parseFloat(o.prof||0),0);
+    const utile=comp.reduce((s,o)=>s+(Number(o.prof)||0),0);
     return`<div class="contact-card" onclick="showContactOrders('${esc(c.nome)}')">
       <div class="cc-top">
         <div class="cc-av">${ini(c.nome)}</div>
@@ -832,9 +842,26 @@ function saveOrder(){
   const id=document.getElementById('fId').value||genId();
   const existing=orders.find(o=>o.id===id);
   const ordNum=document.getElementById('fOrdNum').value.trim()||String(nextId);
-  const spese=parseFloat(document.getElementById('fSpese').value||0);
-  const tot=parseFloat(document.getElementById('fTot').value||0);
-  const order={id,ts:existing?existing.ts:Date.now(),tsEdit:Date.now(),ordNum,nome,tel:document.getElementById('fTel').value.trim(),email:document.getElementById('fEmail').value.trim(),desc,stato:document.getElementById('fStato').value,dataOrd:document.getElementById('fDataOrd').value.trim(),dataCons:document.getElementById('fDataCons').value.trim(),progett:document.getElementById('fProgett').value,mat:(()=>{const id=document.getElementById('fMat').value;const m=MATERIALI.find(x=>x.id===id);return m?m.nome:id;})(),matId:document.getElementById('fMat').value,qty:document.getElementById('fQty').value,peso:document.getElementById('fPeso').value,ore:document.getElementById('fOre').value,file:document.getElementById('fFile').value.trim(),spese:spese||'',tot:tot||'',prof:(tot>0||spese>0)?(tot-spese).toFixed(2):'',note:document.getElementById('fNote').value.trim()};
+  const spese=Number(document.getElementById('fSpese').value)||0;
+  const tot=Number(document.getElementById('fTot').value)||0;
+  const prof=tot>0||spese>0 ? (tot-spese) : null;
+  const order={id,ts:existing?existing.ts:Date.now(),tsEdit:Date.now(),ordNum,nome,
+    tel:document.getElementById('fTel').value.trim(),
+    email:document.getElementById('fEmail').value.trim(),
+    desc,stato:document.getElementById('fStato').value,
+    dataOrd:document.getElementById('fDataOrd').value.trim(),
+    dataCons:document.getElementById('fDataCons').value.trim(),
+    progett:document.getElementById('fProgett').value,
+    mat:(()=>{const mid=document.getElementById('fMat').value;const m=MATERIALI.find(x=>x.id===mid);return m?m.nome:mid;})(),
+    matId:document.getElementById('fMat').value,
+    qty:document.getElementById('fQty').value,
+    peso:document.getElementById('fPeso').value,
+    ore:document.getElementById('fOre').value,
+    file:document.getElementById('fFile').value.trim(),
+    spese:spese||0, tot:tot||0,
+    prof:prof!==null?prof:0,
+    note:document.getElementById('fNote').value.trim()
+  };
   if(existing){Object.assign(existing,order);}else{orders.unshift(order);nextId=Math.max(nextId,parseInt(ordNum)||0)+1;}
   closeAll();renderHome();renderOrders();saveToDrive();
 }
@@ -895,11 +922,11 @@ function openEdit(id){
 function delOrder(id){if(!confirm('Eliminare questo ordine?'))return;orders=orders.filter(o=>o.id!==id);closeAll();renderHome();renderOrders();saveToDrive();showToast('🗑 Ordine eliminato');}
 
 // ── AUTOCOMPLETE CLIENTE ──
+let acMatches=[];
 function acSearch(val){
   const drop=document.getElementById('acDrop');
   const q=val.trim().toLowerCase();
   if(q.length<1){acClose();return;}
-  // Raccoglie clienti unici dagli ordini
   const seen={};
   orders.forEach(o=>{
     if(!o.nome)return;
@@ -908,25 +935,27 @@ function acSearch(val){
       seen[o.nome]={nome:o.nome,tel:o.tel||'',email:o.email||''};
     }
   });
-  const matches=Object.values(seen).slice(0,5);
-  if(!matches.length){acClose();return;}
-  drop.innerHTML=matches.map(c=>`
-    <div class="ac-item" onmousedown="acSelect(${JSON.stringify(JSON.stringify(c))})">
+  acMatches=Object.values(seen).slice(0,5);
+  if(!acMatches.length){acClose();return;}
+  drop.innerHTML=acMatches.map((c,i)=>`
+    <div class="ac-item" onmousedown="event.preventDefault();acSelect(${i})">
       <div class="ac-name">${esc(c.nome)}</div>
       <div class="ac-meta">${[c.tel,c.email].filter(Boolean).join(' · ')}</div>
     </div>`).join('');
   drop.classList.add('open');
 }
-function acSelect(jsonStr){
-  const c=JSON.parse(jsonStr);
+function acSelect(i){
+  const c=acMatches[i];
+  if(!c)return;
   document.getElementById('fNome').value=c.nome;
-  if(c.tel)document.getElementById('fTel').value=c.tel;
-  if(c.email)document.getElementById('fEmail').value=c.email;
+  document.getElementById('fTel').value=c.tel||'';
+  document.getElementById('fEmail').value=c.email||'';
   acClose();
 }
 function acClose(){
   const d=document.getElementById('acDrop');
   if(d){d.classList.remove('open');d.innerHTML='';}
+  acMatches=[];
 }
 
 // ── DATEPICKER ──
