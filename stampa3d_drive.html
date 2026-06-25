@@ -293,9 +293,9 @@ select option{background:var(--s2)}
   <div class="page on" id="pageHome">
     <div class="home-scroll">
       <div class="period-selector" id="periodSel">
-        <button class="period-btn on" onclick="setPeriod('mese',this)">Questo mese</button>
+        <button class="period-btn" onclick="setPeriod('mese',this)">Questo mese</button>
         <button class="period-btn" onclick="setPeriod('anno',this)">Questo anno</button>
-        <button class="period-btn" onclick="setPeriod('tutto',this)">Tutto</button>
+        <button class="period-btn on" onclick="setPeriod('tutto',this)">Tutto</button>
       </div>
       <div class="big-card">
         <div class="big-label">
@@ -494,7 +494,7 @@ let orders=[];
 let nextId=1;
 let filt='tutti';
 let viewMode='card';
-let period='mese';
+let period='tutto';
 
 // ── LISTINO MATERIALI BAMBU LAB (€/kg — store EU, giugno 2026) ──
 const MATERIALI = [
