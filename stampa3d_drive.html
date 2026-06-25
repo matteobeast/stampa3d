@@ -218,21 +218,20 @@ select option{background:var(--s2)}
 .dp-wrap{position:relative}
 .dp-input-wrap{position:relative}
 .dp-icon{position:absolute;right:10px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--text3)}
-.dp-popup{position:absolute;top:calc(100% + 6px);left:0;background:var(--s2);border:.5px solid var(--border2);border-radius:var(--r);z-index:450;box-shadow:0 8px 32px rgba(0,0,0,.5);width:280px;padding:14px;display:none}
+.dp-popup{position:absolute;top:calc(100% + 6px);left:0;background:var(--s2);border:.5px solid var(--border2);border-radius:var(--r);z-index:450;box-shadow:0 8px 32px rgba(0,0,0,.5);width:288px;padding:12px;display:none}
 .dp-popup.open{display:block}
-.dp-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.dp-nav{background:none;border:none;color:var(--text2);cursor:pointer;padding:4px 8px;border-radius:6px;font-size:18px;line-height:1}
+.dp-header{display:flex;align-items:center;gap:6px;margin-bottom:10px}
+.dp-sel{background:var(--s3);border:.5px solid var(--border2);border-radius:6px;color:var(--text);font-size:13px;font-weight:600;padding:5px 6px;cursor:pointer;flex:1;-webkit-appearance:none;text-align:center}
+.dp-sel:focus{outline:none;border-color:var(--accent)}
+.dp-nav{background:none;border:.5px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer;padding:4px 9px;font-size:16px;line-height:1;flex-shrink:0}
 .dp-nav:hover{background:var(--s3);color:var(--text)}
-.dp-month-label{font-size:14px;font-weight:600;color:var(--text);cursor:pointer}
 .dp-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
 .dp-day-hdr{text-align:center;font-size:10px;font-weight:600;color:var(--text3);padding:4px 0;letter-spacing:.04em}
 .dp-day{text-align:center;font-size:13px;padding:6px 2px;border-radius:6px;cursor:pointer;color:var(--text2)}
 .dp-day:hover{background:var(--s3);color:var(--text)}
 .dp-day.today{color:var(--accent);font-weight:700}
 .dp-day.sel{background:var(--accent);color:#fff;font-weight:600}
-.dp-day.other{color:var(--text3)}
-.dp-day.empty{cursor:default}
-.dp-day.empty:hover{background:none}
+.dp-input-wrap input{padding-right:34px}
 
 /* TOAST */
 .toast{position:fixed;bottom:96px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--s2);border:.5px solid var(--border2);color:var(--text);font-size:13px;font-weight:500;padding:10px 20px;border-radius:30px;z-index:500;opacity:0;transition:all .3s;white-space:nowrap;max-width:90vw;text-align:center}
@@ -410,8 +409,8 @@ select option{background:var(--s2)}
         <div><label class="fl">Data ordine</label>
           <div class="dp-wrap">
             <div class="dp-input-wrap">
-              <input type="text" id="fDataOrd" placeholder="gg/mm/aaaa" readonly onclick="dpOpen('fDataOrd','dpOrd')" style="cursor:pointer">
-              <span class="dp-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+              <input type="text" id="fDataOrd" placeholder="gg/mm/aaaa" maxlength="10" oninput="dpFormatInput(this,'dpOrd')">
+              <span class="dp-icon" onclick="dpToggle('fDataOrd','dpOrd')" style="pointer-events:all;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
             </div>
             <div class="dp-popup" id="dpOrd"></div>
           </div>
@@ -419,8 +418,8 @@ select option{background:var(--s2)}
         <div><label class="fl">Data consegna</label>
           <div class="dp-wrap">
             <div class="dp-input-wrap">
-              <input type="text" id="fDataCons" placeholder="gg/mm/aaaa" readonly onclick="dpOpen('fDataCons','dpCons')" style="cursor:pointer">
-              <span class="dp-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+              <input type="text" id="fDataCons" placeholder="gg/mm/aaaa" maxlength="10" oninput="dpFormatInput(this,'dpCons')">
+              <span class="dp-icon" onclick="dpToggle('fDataCons','dpCons')" style="pointer-events:all;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
             </div>
             <div class="dp-popup" id="dpCons"></div>
           </div>
@@ -971,32 +970,54 @@ function acClose(){
 }
 
 // ── DATEPICKER ──
-let dpState={};// {inputId, popupId, year, month}
+const DP_MONTHS=['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+const DP_DAYS=['Lu','Ma','Me','Gi','Ve','Sa','Do'];
+let dpState={};
 
-function dpOpen(inputId,popupId){
-  // Chiudi altri calendari aperti
-  document.querySelectorAll('.dp-popup.open').forEach(p=>{if(p.id!==popupId)p.classList.remove('open');});
+// Auto-formatta mentre si digita: aggiunge / dopo gg e mm
+function dpFormatInput(input,popupId){
+  let v=input.value.replace(/\D/g,'');
+  if(v.length>2)v=v.slice(0,2)+'/'+v.slice(2);
+  if(v.length>5)v=v.slice(0,5)+'/'+v.slice(5,9);
+  input.value=v;
+  // Se data completa e valida, aggiorna il calendario aperto
+  const parts=v.split('/');
+  if(parts.length===3&&parts[2].length===4){
+    const d=parseInt(parts[0]),m=parseInt(parts[1])-1,y=parseInt(parts[2]);
+    if(d>=1&&d<=31&&m>=0&&m<=11&&y>=2000&&y<=2100){
+      if(dpState[popupId]){dpState[popupId].month=m;dpState[popupId].year=y;dpRender(popupId);}
+    }
+  }
+}
+
+function dpToggle(inputId,popupId){
   const popup=document.getElementById(popupId);
   if(popup.classList.contains('open')){popup.classList.remove('open');return;}
-  // Leggi data corrente dal campo
+  document.querySelectorAll('.dp-popup.open').forEach(p=>p.classList.remove('open'));
   const val=document.getElementById(inputId).value;
   let y=new Date().getFullYear(),m=new Date().getMonth();
-  if(val){const p=val.split('/');if(p.length===3){m=parseInt(p[1])-1;y=parseInt(p[2]);}}
+  if(val){const p=val.split('/');if(p.length===3&&p[2].length===4){const pm=parseInt(p[1])-1,py=parseInt(p[2]);if(!isNaN(pm)&&!isNaN(py)){m=pm;y=py;}}}
   dpState[popupId]={inputId,popupId,year:y,month:m};
   dpRender(popupId);
   popup.classList.add('open');
-  // Chiudi cliccando fuori
   setTimeout(()=>document.addEventListener('click',dpOutside,{once:true}),0);
 }
 
 function dpOutside(e){
   document.querySelectorAll('.dp-popup.open').forEach(p=>{
-    if(!p.contains(e.target)&&!p.previousElementSibling.contains(e.target)){
-      p.classList.remove('open');
-    }
+    const wrap=p.closest('.dp-wrap');
+    if(wrap&&!wrap.contains(e.target))p.classList.remove('open');
   });
 }
 
+function dpChangeMonth(popupId,val){
+  dpState[popupId].month=parseInt(val);
+  dpRender(popupId);
+}
+function dpChangeYear(popupId,val){
+  dpState[popupId].year=parseInt(val);
+  dpRender(popupId);
+}
 function dpNav(popupId,delta){
   const s=dpState[popupId];
   s.month+=delta;
@@ -1012,26 +1033,28 @@ function dpRender(popupId){
   const curVal=document.getElementById(inputId).value;
   let selDay=null,selM=null,selY=null;
   if(curVal){const p=curVal.split('/');if(p.length===3){selDay=parseInt(p[0]);selM=parseInt(p[1])-1;selY=parseInt(p[2]);}}
-  const firstDay=new Date(year,month,1).getDay();// 0=Dom
+  const firstDay=new Date(year,month,1).getDay();
   const daysInMonth=new Date(year,month+1,0).getDate();
-  const offset=(firstDay+6)%7;// Lunedì=0
-  const monthLabel=new Date(year,month,1).toLocaleDateString('it',{month:'long',year:'numeric'});
-  const days=['Lu','Ma','Me','Gi','Ve','Sa','Do'];
+  const offset=(firstDay+6)%7;
+  // Anno: da 2020 a 2035
+  const yearOpts=[];for(let y2=2020;y2<=2035;y2++)yearOpts.push(`<option value="${y2}"${y2===year?' selected':''}>${y2}</option>`);
+  const monthOpts=DP_MONTHS.map((n,i)=>`<option value="${i}"${i===month?' selected':''}>${n}</option>`).join('');
   let cells='';
   for(let i=0;i<offset;i++)cells+=`<div class="dp-day empty"></div>`;
   for(let d=1;d<=daysInMonth;d++){
     const isSel=selDay===d&&selM===month&&selY===year;
     const isToday=today.getDate()===d&&today.getMonth()===month&&today.getFullYear()===year;
-    cells+=`<div class="dp-day${isSel?' sel':isToday?' today':''}" onmousedown="dpSelect('${popupId}',${d})">${d}</div>`;
+    cells+=`<div class="dp-day${isSel?' sel':isToday?' today':''}" onmousedown="event.preventDefault();dpSelect('${popupId}',${d})">${d}</div>`;
   }
   document.getElementById(popupId).innerHTML=`
     <div class="dp-header">
       <button class="dp-nav" onmousedown="event.preventDefault();dpNav('${popupId}',-1)">‹</button>
-      <span class="dp-month-label">${monthLabel}</span>
+      <select class="dp-sel" onchange="dpChangeMonth('${popupId}',this.value)" onmousedown="event.stopPropagation()">${monthOpts}</select>
+      <select class="dp-sel" style="flex:0 0 68px" onchange="dpChangeYear('${popupId}',this.value)" onmousedown="event.stopPropagation()">${yearOpts}</select>
       <button class="dp-nav" onmousedown="event.preventDefault();dpNav('${popupId}',1)">›</button>
     </div>
     <div class="dp-grid">
-      ${days.map(d=>`<div class="dp-day-hdr">${d}</div>`).join('')}
+      ${DP_DAYS.map(d=>`<div class="dp-day-hdr">${d}</div>`).join('')}
       ${cells}
     </div>`;
 }
