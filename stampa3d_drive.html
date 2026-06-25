@@ -388,7 +388,7 @@ select option{background:var(--s2)}
       <div class="fr">
         <label class="fl">Nome e cognome *</label>
         <div class="ac-wrap">
-          <input type="text" id="fNome" placeholder="Es. Mario Rossi" autocomplete="off" oninput="acSearch(this.value)" onblur="setTimeout(acClose,200)">
+          <input type="text" id="fNome" placeholder="Es. Mario Rossi" autocomplete="off" oninput="acSearch(this.value)" onblur="acBlur()">
           <div class="ac-drop" id="acDrop"></div>
         </div>
       </div>
@@ -631,7 +631,7 @@ async function loadFromDrive(){
       persist();setSyncStatus('ok','✓ Sincronizzato');showToast('✅ '+orders.length+' ordini caricati da Drive');
     }else{tryLocalFallback();setSyncStatus('ok','✓ Pronto');showToast('ℹ️ Nessun dato su Drive — inizia ad aggiungere ordini!');}
   }catch(e){tryLocalFallback();setSyncStatus('err','⚠ Offline');showToast('⚠️ Drive non raggiungibile — dati locali');}
-  renderHome();renderOrders();
+  renderHome();renderOrders();renderContacts();
 }
 function tryLocalFallback(){try{const r=localStorage.getItem(LS_DATA);if(r){const d=JSON.parse(r);orders=d.orders||[];nextId=d.nextId||1;}}catch(e){}}
 async function saveToDrive(){
@@ -923,6 +923,8 @@ function delOrder(id){if(!confirm('Eliminare questo ordine?'))return;orders=orde
 
 // ── AUTOCOMPLETE CLIENTE ──
 let acMatches=[];
+let acClicking=false;
+
 function acSearch(val){
   const drop=document.getElementById('acDrop');
   const q=val.trim().toLowerCase();
@@ -930,21 +932,26 @@ function acSearch(val){
   const seen={};
   orders.forEach(o=>{
     if(!o.nome)return;
-    const k=o.nome.toLowerCase();
-    if(k.includes(q)&&!seen[o.nome]){
-      seen[o.nome]={nome:o.nome,tel:o.tel||'',email:o.email||''};
+    if(o.nome.toLowerCase().includes(q)||(o.tel||'').toLowerCase().includes(q)){
+      if(!seen[o.nome])seen[o.nome]={nome:o.nome,tel:o.tel||'',email:o.email||''};
     }
   });
-  acMatches=Object.values(seen).slice(0,5);
+  acMatches=Object.values(seen).slice(0,6);
   if(!acMatches.length){acClose();return;}
   drop.innerHTML=acMatches.map((c,i)=>`
-    <div class="ac-item" onmousedown="event.preventDefault();acSelect(${i})">
+    <div class="ac-item"
+      onmousedown="acClicking=true"
+      onmouseup="acSelect(${i})"
+      ontouchstart="acClicking=true"
+      ontouchend="acSelect(${i})">
       <div class="ac-name">${esc(c.nome)}</div>
-      <div class="ac-meta">${[c.tel,c.email].filter(Boolean).join(' · ')}</div>
+      <div class="ac-meta">${[c.tel,c.email].filter(Boolean).join(' · ') || '&nbsp;'}</div>
     </div>`).join('');
   drop.classList.add('open');
 }
+
 function acSelect(i){
+  acClicking=false;
   const c=acMatches[i];
   if(!c)return;
   document.getElementById('fNome').value=c.nome;
@@ -952,6 +959,11 @@ function acSelect(i){
   document.getElementById('fEmail').value=c.email||'';
   acClose();
 }
+
+function acBlur(){
+  setTimeout(()=>{if(!acClicking)acClose();acClicking=false;},250);
+}
+
 function acClose(){
   const d=document.getElementById('acDrop');
   if(d){d.classList.remove('open');d.innerHTML='';}
