@@ -238,6 +238,7 @@ select option{background:var(--s2)}
 .toast{position:fixed;bottom:96px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--s2);border:.5px solid var(--border2);color:var(--text);font-size:13px;font-weight:500;padding:10px 20px;border-radius:30px;z-index:500;opacity:0;transition:all .3s;white-space:nowrap;max-width:90vw;text-align:center}
 .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 
@@ -988,7 +989,11 @@ function openDetail(id){
     ${o.prof?`<div class="dr"><span class="dk">Profitto</span><span class="dv" style="color:var(--green);font-weight:700">+€${fm(o.prof)}</span></div>`:''}
   </div>`;}
   if(o.note){h+=`<div class="ds"><div class="dt">Note</div><div class="note-box">${esc(o.note)}</div></div>`;}
-  h+=`<div class="ar"><button class="btn-edit" onclick="openEdit('${o.id}')">✏️ Modifica</button><button class="btn-del" onclick="delOrder('${o.id}')">🗑</button></div>`;
+  h+=`<div class="ar">
+    <button class="btn-edit" onclick="openEdit('${o.id}')">✏️ Modifica</button>
+    <button class="btn-edit" style="background:var(--green-bg);color:var(--green);border-color:rgba(44,182,125,.2)" onclick="generatePDF('${o.id}')">📄 PDF</button>
+    <button class="btn-del" onclick="delOrder('${o.id}')">🗑</button>
+  </div>`;
   document.getElementById('dTitle').textContent=o.nome;
   document.getElementById('dBody').innerHTML=h;
   openPanel('pDetail');
@@ -1174,6 +1179,132 @@ function dpSelect(popupId,day){
 
 // ── TOAST ──
 let toastTm;
+// ── PDF PREVENTIVO ──
+function generatePDF(id){
+  const o=orders.find(x=>x.id===id);
+  if(!o){showToast('Ordine non trovato');return;}
+  if(typeof window.jspdf==='undefined'){showToast('⏳ Libreria PDF in caricamento, riprova tra 2 secondi');return;}
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  const W=210,ml=18,mr=18,cw=W-ml-mr;
+  let y=0;
+
+  // Colori
+  const C={accent:[26,86,160],text:[30,30,30],text2:[100,100,95],border:[220,218,212],green:[45,110,15],amber:[122,69,0],bg:[245,244,240],white:[255,255,255]};
+  const setC=(r,fill=true)=>fill?doc.setFillColor(...r):doc.setTextColor(...r);
+
+  // ── HEADER BLU ──
+  setC(C.accent);
+  doc.rect(0,0,W,38,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(20);
+  doc.text('PREVENTIVO',ml,16);
+  doc.setFontSize(10);
+  doc.setFont('helvetica','normal');
+  doc.text(`N° ${o.ordNum} · ${o.dataOrd||'—'}`,ml,23);
+  // badge stato
+  const stLabel={preventivo:'PREVENTIVO','in corso':'IN CORSO',completato:'COMPLETATO','in attesa':'IN ATTESA'}[o.stato]||o.stato.toUpperCase();
+  doc.setFont('helvetica','bold');doc.setFontSize(8);
+  doc.text(stLabel,W-mr,14,{align:'right'});
+  y=48;
+
+  // ── DATI CLIENTE ──
+  setC(C.bg);doc.rect(ml,y-4,cw,o.email?28:22,'F');
+  doc.setTextColor(...C.text2);doc.setFont('helvetica','bold');doc.setFontSize(7.5);
+  doc.text('CLIENTE',ml+4,y+1);
+  doc.setTextColor(...C.text);doc.setFont('helvetica','bold');doc.setFontSize(12);
+  doc.text(o.nome||'—',ml+4,y+8);
+  doc.setFont('helvetica','normal');doc.setFontSize(9);
+  if(o.tel){doc.setTextColor(...C.text2);doc.text('Tel: ',ml+4,y+14);doc.setTextColor(...C.text);doc.text(o.tel,ml+14,y+14);}
+  if(o.email){doc.setTextColor(...C.text2);doc.text('Email: ',ml+4,y+20);doc.setTextColor(...C.text);doc.text(o.email,ml+18,y+20);}
+  y+=o.email?34:28;
+
+  // ── DESCRIZIONE ──
+  doc.setFont('helvetica','bold');doc.setFontSize(13);
+  doc.setTextColor(...C.text);
+  doc.text(o.desc||'—',ml,y);
+  y+=7;
+  if(o.dataCons){
+    doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(...C.text2);
+    doc.text(`Data consegna prevista: ${o.dataCons}`,ml,y);y+=5;
+  }
+  y+=4;
+
+  // ── LINEA ──
+  doc.setDrawColor(...C.border);doc.setLineWidth(0.3);doc.line(ml,y,W-mr,y);y+=6;
+
+  // ── TABELLA VOCI ──
+  const rows=[];
+  if(o.mat&&o.peso)   rows.push(['Materiale di stampa',`${o.mat} — ${o.qty||1} pz × ${o.pesoPezzo||o.peso}g = ${o.peso}g tot.`,o.costoMat?`€ ${fm(o.costoMat)}`:'—']);
+  if(o.ore)           rows.push(['Stampa 3D',`${o.ore} ore di stampa`,o.costoMacchina?`€ ${fm(o.costoMacchina)}`:'—']);
+  if(o.oreProgett)    rows.push(['Progettazione',`${o.oreProgett} ore di progettazione`,o.costoProgett?`€ ${fm(o.costoProgett)}`:'—']);
+
+  if(rows.length){
+    // header tabella
+    setC(C.accent);doc.rect(ml,y,cw,7,'F');
+    doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(8);
+    doc.text('VOCE',ml+3,y+4.8);
+    doc.text('DETTAGLIO',ml+45,y+4.8);
+    doc.text('IMPORTO',W-mr-3,y+4.8,{align:'right'});
+    y+=7;
+
+    rows.forEach((r,i)=>{
+      const rh=10;
+      setC(i%2===0?C.white:C.bg);doc.rect(ml,y,cw,rh,'F');
+      doc.setTextColor(...C.text);doc.setFont('helvetica','bold');doc.setFontSize(8.5);
+      doc.text(r[0],ml+3,y+6.5);
+      doc.setFont('helvetica','normal');doc.setFontSize(7.5);doc.setTextColor(...C.text2);
+      doc.text(r[1],ml+45,y+6.5);
+      doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(...C.text);
+      doc.text(r[2],W-mr-3,y+6.5,{align:'right'});
+      y+=rh;
+    });
+    y+=4;
+  }
+
+  // ── TOTALE ──
+  doc.setDrawColor(...C.border);doc.line(ml,y,W-mr,y);y+=5;
+  const totX=W-mr-60;
+  if(o.spese){
+    doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(...C.text2);
+    doc.text('Totale costi:',totX,y);
+    doc.setFont('helvetica','bold');doc.setTextColor(...C.text);
+    doc.text(`€ ${fm(o.spese)}`,W-mr,y,{align:'right'});y+=6;
+  }
+  if(o.tot){
+    setC(C.accent);doc.rect(totX-4,y-5,cw-(totX-ml-4)+4,10,'F');
+    doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(12);
+    doc.text('TOTALE:',totX,y+1.5);
+    doc.text(`€ ${fm(o.tot)}`,W-mr-2,y+1.5,{align:'right'});
+    y+=14;
+  }
+
+  // ── NOTE ──
+  if(o.note){
+    y+=4;
+    setC(C.bg);
+    const noteLines=doc.splitTextToSize(o.note,cw-8);
+    const noteH=noteLines.length*5+10;
+    doc.rect(ml,y,cw,noteH,'F');
+    doc.setTextColor(...C.text2);doc.setFont('helvetica','bold');doc.setFontSize(7.5);
+    doc.text('NOTE',ml+4,y+5);
+    doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(...C.text);
+    doc.text(noteLines,ml+4,y+11);
+    y+=noteH+4;
+  }
+
+  // ── FOOTER ──
+  doc.setDrawColor(...C.border);doc.line(ml,280,W-mr,280);
+  doc.setFont('helvetica','normal');doc.setFontSize(7.5);doc.setTextColor(...C.text2);
+  doc.text('Documento generato da Stampa3D Manager',ml,285);
+  doc.text(`Pagina 1 di 1`,W-mr,285,{align:'right'});
+
+  const fname=`preventivo_${(o.nome||'cliente').replace(/\s+/g,'_')}_${o.ordNum}.pdf`;
+  doc.save(fname);
+  showToast('📄 PDF scaricato!');
+}
+
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTm);toastTm=setTimeout(()=>t.classList.remove('show'),3400);}
 </script>
 </body>
