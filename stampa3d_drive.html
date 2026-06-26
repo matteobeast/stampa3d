@@ -19,7 +19,8 @@
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:15px}
 
 /* ── SETUP ── */
-#setupScreen{position:fixed;inset:0;background:var(--bg);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;overflow-y:auto}
+.setup-label{font-size:12px;color:var(--text2);margin-bottom:6px;text-align:left}
+#setupScreen{position:fixed;inset:0;background:var(--bg);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:32px 24px;text-align:center;overflow-y:auto}
 .setup-logo{width:64px;height:64px;border-radius:18px;background:var(--accent);display:flex;align-items:center;justify-content:center;margin:0 auto 20px}
 .setup-title{font-size:22px;font-weight:700;margin-bottom:8px}
 .setup-sub{font-size:14px;color:var(--text2);margin-bottom:28px;line-height:1.6;max-width:340px}
@@ -453,11 +454,15 @@ select option{background:var(--s2)}
         <div><label class="fl">Ore di stampa (totali)</label><input type="number" id="fOre" placeholder="0" step="0.5" min="0" oninput="calcCosti()"></div>
         <div><label class="fl">File STL</label><input type="text" id="fFile" placeholder="nome.stl"></div>
       </div>
+      <div class="fr2">
+        <div><label class="fl">Ore di progettazione</label><input type="number" id="fOreProgett" placeholder="0" step="0.5" min="0" oninput="calcCosti()"></div>
+        <div><label class="fl">Costo progett. (€)</label><input type="number" id="fCostoProgett" placeholder="auto" step="0.01" readonly style="background:var(--s3);color:var(--accent-t)"></div>
+      </div>
     </div>
     <div class="fs">
       <div class="fs-t">Economia</div>
       <div class="fr3">
-        <div><label class="fl">Spese totali (€) <span style="font-size:10px;color:var(--text3)">mat.+macchina</span></label><input type="number" id="fSpese" placeholder="auto" step="0.01" readonly style="background:var(--s3);color:var(--amber)"></div>
+        <div><label class="fl">Spese totali (€) <span style="font-size:10px;color:var(--text3)">mat.+macch.+prog.</span></label><input type="number" id="fSpese" placeholder="auto" step="0.01" readonly style="background:var(--s3);color:var(--amber)"></div>
         <div><label class="fl">Totale fatt. (€)</label><input type="number" id="fTot" placeholder="0.00" step="0.01" min="0" oninput="calcProf()"></div>
         <div><label class="fl">Profitto (€)</label><input type="number" id="fProf" placeholder="auto" step="0.01" readonly style="background:var(--s3);color:var(--green)"></div>
       </div>
@@ -481,11 +486,18 @@ select option{background:var(--s2)}
     <div class="fs">
       <div class="fs-t">Costo deperimento macchina</div>
       <div class="fr">
-        <label class="fl">Tariffa oraria (€/ora)</label>
+        <label class="fl">Tariffa oraria stampa (€/ora)</label>
         <input type="number" id="sMachineRate" placeholder="es. 0.50" step="0.01" min="0">
       </div>
+    </div>
+    <div class="fs">
+      <div class="fs-t">Costo progettazione</div>
+      <div class="fr">
+        <label class="fl">Tariffa oraria progettazione (€/ora)</label>
+        <input type="number" id="sDesignRate" placeholder="es. 25.00" step="0.01" min="0">
+      </div>
       <p style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:4px">
-        Verrà moltiplicata per le ore di stampa di ogni ordine e sommata al costo materiale per calcolare le spese totali.
+        Verrà moltiplicata per le ore di progettazione inserite in ogni ordine.
       </p>
     </div>
     <button class="btn-save" onclick="saveSettingsPanel()">
@@ -520,9 +532,10 @@ let nextId=1;
 let filt='tutti';
 let viewMode='card';
 let period='tutto';
-let machineRate=0;// €/ora — tariffa deperimento macchina
-function loadSettings(){try{const s=localStorage.getItem(LS_SETTINGS);if(s){const d=JSON.parse(s);machineRate=Number(d.machineRate)||0;}}catch(e){}}
-function saveSettings(){localStorage.setItem(LS_SETTINGS,JSON.stringify({machineRate}));}
+let machineRate=0;
+let designRate=0;
+function loadSettings(){try{const s=localStorage.getItem(LS_SETTINGS);if(s){const d=JSON.parse(s);machineRate=Number(d.machineRate)||0;designRate=Number(d.designRate)||0;}}catch(e){}}
+function saveSettings(){localStorage.setItem(LS_SETTINGS,JSON.stringify({machineRate,designRate}));}
 
 // ── LISTINO MATERIALI BAMBU LAB (€/kg — store EU, giugno 2026) ──
 const MATERIALI = [
@@ -723,9 +736,9 @@ function renderHome(){
   document.getElementById('homeComp').textContent=comp.length;
   document.getElementById('homeMargine').textContent=margine!==null?margine+'%':'—';
 
-  // chart 6 mesi — basato su data consegna
+  // chart 12 mesi — basato su data consegna
   const months=[];const now=new Date();
-  for(let i=5;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);months.push({m:d.getMonth(),y:d.getFullYear(),label:d.toLocaleDateString('it',{month:'short'})});}
+  for(let i=11;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);months.push({m:d.getMonth(),y:d.getFullYear(),label:d.toLocaleDateString('it',{month:'short'})});}
   const vals=months.map(({m,y})=>orders.filter(o=>{
     if(o.stato!=='completato')return false;
     const dateStr=o.dataCons||o.dataOrd||'';
@@ -735,11 +748,16 @@ function renderHome(){
     return d&&d.getMonth()===m&&d.getFullYear()===y;
   }).reduce((s,o)=>s+parseFloat(o.prof||0),0));
   const maxV=Math.max(...vals,1);
-  document.getElementById('chartBars').innerHTML=vals.map((v,i)=>`<div class="bar${i===5?' hi':''}" style="height:${Math.max(3,Math.round(v/maxV*100))}%"></div>`).join('');
+  document.getElementById('chartBars').innerHTML=vals.map((v,i)=>`<div class="bar${i===11?' hi':''}" style="height:${Math.max(3,Math.round(v/maxV*100))}%"></div>`).join('');
   document.getElementById('chartLabels').innerHTML=months.map(m=>`<div class="bar-lbl">${m.label}</div>`).join('');
 
-  // recent
-  const recent=[...orders].sort((a,b)=>(b.tsEdit||b.ts||0)-(a.tsEdit||a.ts||0)).slice(0,8);
+  // recent — ordinati per data consegna (più vicina prima), poi data ordine
+  function getDateVal(o){
+    const s=o.dataCons||o.dataOrd||'';
+    if(s){const p=s.split('/');if(p.length===3){const d=new Date(parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0]));if(!isNaN(d))return d.getTime();}}
+    return o.ts||0;
+  }
+  const recent=[...orders].sort((a,b)=>getDateVal(b)-getDateVal(a)).slice(0,8);
   const rl=document.getElementById('recentList');
   if(!recent.length){rl.innerHTML='<div class="empty-home">Nessun ordine ancora.<br>Premi + per aggiungerne uno!</div>';return;}
   rl.innerHTML=recent.map(o=>{
@@ -828,7 +846,7 @@ function openNew(){
   document.getElementById('fTitle').textContent='Nuovo ordine';
   document.getElementById('fId').value='';
   ['fNome','fTel','fEmail','fDesc','fOrdNum','fDataOrd','fDataCons','fFile','fNote'].forEach(id=>document.getElementById(id).value='');
-  ['fQty','fPeso','fPesoTot','fOre','fSpese','fTot','fProf','fCostoMat','fCostoMacchina'].forEach(id=>document.getElementById(id).value='');
+  ['fQty','fPeso','fPesoTot','fOre','fOreProgett','fSpese','fTot','fProf','fCostoMat','fCostoMacchina','fCostoProgett'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('fMat').value='';document.getElementById('fMatAltroWrap').style.display='none';
   document.getElementById('fStato').value='preventivo';document.getElementById('fProgett').value='';
   document.getElementById('fOrdNum').placeholder='#'+nextId;
@@ -843,13 +861,15 @@ function openNew(){
 
 function openSettings(){
   document.getElementById('sMachineRate').value=machineRate||'';
+  document.getElementById('sDesignRate').value=designRate||'';
   openPanel('pSettings');
 }
 function saveSettingsPanel(){
   machineRate=Number(document.getElementById('sMachineRate').value)||0;
+  designRate=Number(document.getElementById('sDesignRate').value)||0;
   saveSettings();
   closeAll();
-  showToast('✅ Impostazioni salvate — tariffa: €'+machineRate.toFixed(2)+'/ora');
+  showToast('✅ Impostazioni salvate');
 }
 function onMatChange(){
   const id=document.getElementById('fMat').value;
@@ -867,6 +887,7 @@ function calcCosti(){
   const qty=Number(document.getElementById('fQty').value)||1;
   const pesoPezzo=Number(document.getElementById('fPeso').value)||0;
   const ore=Number(document.getElementById('fOre').value)||0;
+  const oreProgett=Number(document.getElementById('fOreProgett').value)||0;
   // Peso totale
   const pesoTot=pesoPezzo*qty;
   document.getElementById('fPesoTot').value=pesoTot>0?pesoTot.toFixed(1):'';
@@ -881,8 +902,11 @@ function calcCosti(){
   // Costo macchina
   const costoMacchina=ore*machineRate;
   document.getElementById('fCostoMacchina').value=costoMacchina>0?costoMacchina.toFixed(2):'';
+  // Costo progettazione
+  const costoProgett=oreProgett*designRate;
+  document.getElementById('fCostoProgett').value=costoProgett>0?costoProgett.toFixed(2):'';
   // Spese totali
-  const spese=costoMat+costoMacchina;
+  const spese=costoMat+costoMacchina+costoProgett;
   document.getElementById('fSpese').value=spese>0?spese.toFixed(2):'';
   calcProf();
 }
@@ -916,9 +940,11 @@ function saveOrder(){
     mat:(()=>{const mid=document.getElementById('fMat').value;const m=MATERIALI.find(x=>x.id===mid);return m?m.nome:mid;})(),
     matId:document.getElementById('fMat').value,
     qty, pesoPezzo,
-    peso:pesoPezzo*qty,// peso totale calcolato
+    peso:pesoPezzo*qty,
     costoMat:Number(document.getElementById('fCostoMat').value)||0,
     costoMacchina:Number(document.getElementById('fCostoMacchina').value)||0,
+    oreProgett:Number(document.getElementById('fOreProgett').value)||0,
+    costoProgett:Number(document.getElementById('fCostoProgett').value)||0,
     ore:document.getElementById('fOre').value,
     file:document.getElementById('fFile').value.trim(),
     spese:spese||0, tot:tot||0,
@@ -955,6 +981,8 @@ function openDetail(id){
   if(o.spese||o.tot){h+=`<div class="ds"><div class="dt">Economia</div>
     ${o.costoMat?`<div class="dr"><span class="dk">Costo materiale</span><span class="dv">€${fm(o.costoMat)}</span></div>`:''}
     ${o.costoMacchina?`<div class="dr"><span class="dk">Costo macchina</span><span class="dv">€${fm(o.costoMacchina)}</span></div>`:''}
+    ${o.oreProgett?`<div class="dr"><span class="dk">Ore progettazione</span><span class="dv">${o.oreProgett} h</span></div>`:''}
+    ${o.costoProgett?`<div class="dr"><span class="dk">Costo progettazione</span><span class="dv">€${fm(o.costoProgett)}</span></div>`:''}
     ${o.spese?`<div class="dr"><span class="dk">Spese totali</span><span class="dv" style="color:var(--amber)">€${fm(o.spese)}</span></div>`:''}
     ${o.tot?`<div class="dr"><span class="dk">Totale fatturato</span><span class="dv" style="font-weight:700">€${fm(o.tot)}</span></div>`:''}
     ${o.prof?`<div class="dr"><span class="dk">Profitto</span><span class="dv" style="color:var(--green);font-weight:700">+€${fm(o.prof)}</span></div>`:''}
@@ -988,6 +1016,7 @@ function openEdit(id){
     // Peso: supporta sia vecchi ordini (pesoTot) che nuovi (pesoPezzo)
     document.getElementById('fPeso').value=o.pesoPezzo||o.peso||'';
     document.getElementById('fOre').value=o.ore||'';
+    document.getElementById('fOreProgett').value=o.oreProgett||'';
     document.getElementById('fTot').value=o.tot||'';
     calcCosti();// ricalcola tutto
     acClose();
