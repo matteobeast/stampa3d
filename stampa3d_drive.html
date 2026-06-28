@@ -443,7 +443,7 @@ select option{background:var(--s2)}
         <input type="number" id="fMatPrezzo" placeholder="es. 29.99" step="0.01" min="0" oninput="calcCosti()">
       </div>
       <div class="fr2">
-        <div><label class="fl">Quantità pezzi</label><input type="number" id="fQty" placeholder="1" min="0" oninput="calcCosti()"></div>
+        <div><label class="fl">Quantità pezzi</label><input type="number" id="fQty" placeholder="1" min="0" oninput="calcCosti();calcTotaleVendita()"></div>
         <div><label class="fl">Peso singolo pezzo (g)</label><input type="number" id="fPeso" placeholder="0" min="0" oninput="calcCosti()"></div>
       </div>
       <div class="fr3">
@@ -462,11 +462,16 @@ select option{background:var(--s2)}
     </div>
     <div class="fs">
       <div class="fs-t">Economia</div>
-      <div class="fr3">
-        <div><label class="fl">Spese totali (€) <span style="font-size:10px;color:var(--text3)">mat.+macch.+prog.</span></label><input type="number" id="fSpese" placeholder="auto" step="0.01" readonly style="background:var(--s3);color:var(--amber)"></div>
-        <div><label class="fl">Totale fatt. (€)</label><input type="number" id="fTot" placeholder="0.00" step="0.01" min="0" oninput="calcProf()"></div>
-        <div><label class="fl">Profitto (€)</label><input type="number" id="fProf" placeholder="auto" step="0.01" readonly style="background:var(--s3);color:var(--green)"></div>
+      <div class="fr2">
+        <div><label class="fl">Prezzo unitario (€/pz)</label><input type="number" id="fPrezzoUnit" placeholder="0.00" step="0.01" min="0" oninput="calcTotaleVendita()"></div>
+        <div><label class="fl">Totale vendita (€) <span style="font-size:10px;color:var(--text3)">auto da pz×prezzo</span></label><input type="number" id="fTot" placeholder="0.00" step="0.01" min="0" oninput="calcProf()"></div>
       </div>
+      <div class="fr3">
+        <div><label class="fl">Spese stampa (€) <span style="font-size:10px;color:var(--text3)">mat.+macch.</span></label><input type="number" id="fSpese" placeholder="auto" step="0.01" readonly style="background:var(--s3);color:var(--amber)"></div>
+        <div><label class="fl">Ore progett. (tracciato)</label><input type="number" id="fOreProgettDisplay" placeholder="—" step="0.01" readonly style="background:var(--s3);color:var(--accent-t)"></div>
+        <div><label class="fl">Profitto netto (€)</label><input type="number" id="fProf" placeholder="auto" step="0.01" readonly style="background:var(--s3);color:var(--green)"></div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:-4px;margin-bottom:10px">⚠️ Le ore di progettazione non vengono sottratte al profitto — sono solo tracciate nel preventivo.</div>
     </div>
     <div class="fs">
       <div class="fs-t">Note</div>
@@ -847,7 +852,7 @@ function openNew(){
   document.getElementById('fTitle').textContent='Nuovo ordine';
   document.getElementById('fId').value='';
   ['fNome','fTel','fEmail','fDesc','fOrdNum','fDataOrd','fDataCons','fFile','fNote'].forEach(id=>document.getElementById(id).value='');
-  ['fQty','fPeso','fPesoTot','fOre','fOreProgett','fSpese','fTot','fProf','fCostoMat','fCostoMacchina','fCostoProgett'].forEach(id=>document.getElementById(id).value='');
+  ['fQty','fPeso','fPesoTot','fOre','fOreProgett','fSpese','fTot','fProf','fCostoMat','fCostoMacchina','fCostoProgett','fPrezzoUnit','fOreProgettDisplay'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('fMat').value='';document.getElementById('fMatAltroWrap').style.display='none';
   document.getElementById('fStato').value='preventivo';document.getElementById('fProgett').value='';
   document.getElementById('fOrdNum').placeholder='#'+nextId;
@@ -903,13 +908,25 @@ function calcCosti(){
   // Costo macchina
   const costoMacchina=ore*machineRate;
   document.getElementById('fCostoMacchina').value=costoMacchina>0?costoMacchina.toFixed(2):'';
-  // Costo progettazione
+  // Costo progettazione — solo tracciato, NON sottratto al profitto
   const costoProgett=oreProgett*designRate;
   document.getElementById('fCostoProgett').value=costoProgett>0?costoProgett.toFixed(2):'';
-  // Spese totali
-  const spese=costoMat+costoMacchina+costoProgett;
+  // Spese stampa = solo mat + macchina (NO progettazione)
+  const spese=costoMat+costoMacchina;
   document.getElementById('fSpese').value=spese>0?spese.toFixed(2):'';
+  // Mostra ore progett nel campo display readonly
+  document.getElementById('fOreProgettDisplay').value=oreProgett>0?oreProgett+' h (€'+costoProgett.toFixed(2)+')':'';
   calcProf();
+}
+
+// Calcola totale vendita da prezzo unitario × quantità
+function calcTotaleVendita(){
+  const prezzoUnit=Number(document.getElementById('fPrezzoUnit').value)||0;
+  const qty=Number(document.getElementById('fQty').value)||1;
+  if(prezzoUnit>0){
+    document.getElementById('fTot').value=(prezzoUnit*qty).toFixed(2);
+    calcProf();
+  }
 }
 
 document.getElementById('fTot').addEventListener('input',calcProf);
@@ -948,6 +965,7 @@ function saveOrder(){
     costoProgett:Number(document.getElementById('fCostoProgett').value)||0,
     ore:document.getElementById('fOre').value,
     file:document.getElementById('fFile').value.trim(),
+    prezzoUnit:Number(document.getElementById('fPrezzoUnit').value)||0,
     spese:spese||0, tot:tot||0,
     prof:prof!==null?prof:0,
     note:document.getElementById('fNote').value.trim()
@@ -1022,6 +1040,7 @@ function openEdit(id){
     document.getElementById('fPeso').value=o.pesoPezzo||o.peso||'';
     document.getElementById('fOre').value=o.ore||'';
     document.getElementById('fOreProgett').value=o.oreProgett||'';
+    document.getElementById('fPrezzoUnit').value=o.prezzoUnit||'';
     document.getElementById('fTot').value=o.tot||'';
     calcCosti();// ricalcola tutto
     acClose();
@@ -1236,9 +1255,15 @@ function generatePDF(id){
 
   // ── TABELLA VOCI ──
   const rows=[];
-  if(o.mat&&o.peso)   rows.push(['Materiale di stampa',`${o.mat} — ${o.qty||1} pz × ${o.pesoPezzo||o.peso}g = ${o.peso}g tot.`,o.costoMat?`€ ${fm(o.costoMat)}`:'—']);
-  if(o.ore)           rows.push(['Stampa 3D',`${o.ore} ore di stampa`,o.costoMacchina?`€ ${fm(o.costoMacchina)}`:'—']);
-  if(o.oreProgett)    rows.push(['Progettazione',`${o.oreProgett} ore di progettazione`,o.costoProgett?`€ ${fm(o.costoProgett)}`:'—']);
+  // Voce principale: pezzi stampati con prezzo unitario
+  if(o.qty&&o.prezzoUnit){
+    rows.push([`Stampa 3D — ${o.desc||''}`,`${o.qty} pz × € ${fm(o.prezzoUnit)}/pz`,`€ ${fm(o.prezzoUnit*o.qty)}`]);
+  } else if(o.mat&&o.peso){
+    rows.push(['Materiale di stampa',`${o.mat} — ${o.qty||1} pz × ${o.pesoPezzo||o.peso}g = ${o.peso}g tot.`,o.costoMat?`€ ${fm(o.costoMat)}`:'—']);
+    if(o.ore) rows.push(['Stampa 3D',`${o.ore} ore di stampa`,o.costoMacchina?`€ ${fm(o.costoMacchina)}`:'—']);
+  }
+  // Progettazione: sempre mostrata separatamente se presente
+  if(o.oreProgett) rows.push(['Progettazione CAD',`${o.oreProgett} h × € ${fm(o.costoProgett/o.oreProgett||designRate)}/h`,o.costoProgett?`€ ${fm(o.costoProgett)}`:'—']);
 
   if(rows.length){
     // header tabella
@@ -1266,11 +1291,16 @@ function generatePDF(id){
   // ── TOTALE ──
   doc.setDrawColor(...C.border);doc.line(ml,y,W-mr,y);y+=5;
   const totX=W-mr-60;
-  if(o.spese){
+  // Subtotale stampa se c'è anche progettazione
+  if(o.oreProgett&&o.costoProgett&&o.prezzoUnit){
     doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(...C.text2);
-    doc.text('Totale costi:',totX,y);
+    doc.text('Subtotale stampa:',totX,y);
     doc.setFont('helvetica','bold');doc.setTextColor(...C.text);
-    doc.text(`€ ${fm(o.spese)}`,W-mr,y,{align:'right'});y+=6;
+    doc.text(`€ ${fm(o.prezzoUnit*(o.qty||1))}`,W-mr,y,{align:'right'});y+=6;
+    doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(...C.text2);
+    doc.text('Progettazione CAD:',totX,y);
+    doc.setFont('helvetica','bold');doc.setTextColor(...C.text);
+    doc.text(`€ ${fm(o.costoProgett)}`,W-mr,y,{align:'right'});y+=6;
   }
   if(o.tot){
     setC(C.accent);doc.rect(totX-4,y-5,cw-(totX-ml-4)+4,10,'F');
