@@ -1263,7 +1263,7 @@ function generatePDF(id){
   rgb(...C.accent,false);
   doc.setFont('helvetica','bold');
   doc.setFontSize(22);
-  doc.text(myInfo.nome||'Stampa 3D',ml,16);
+  doc.text(myInfo.nome||'Sev4s3D',ml,16);
 
   // Dati fornitore (destra)
   doc.setFont('helvetica','normal');
@@ -1342,14 +1342,14 @@ function generatePDF(id){
   const totStampa=prezzoStampa*qta;
   if(prezzoStampa>0){
     rows.push({
-      desc:'Stampa 3D',
+      desc:'Sev4s3D',
       sub: o.desc||'',
       qty: qta,
       ppu: prezzoStampa,
       tot: totStampa,
     });
   } else if(o.tot){
-    rows.push({desc:'Stampa 3D',sub:o.desc||'',qty:qta,ppu:null,tot:Number(o.tot)});
+    rows.push({desc:'Sev4s3D',sub:o.desc||'',qty:qta,ppu:null,tot:Number(o.tot)});
   }
 
   // Riga progettazione (se presente)
@@ -1433,9 +1433,16 @@ function generatePDF(id){
   doc.text(footerTxt,ml,footerY+4);
   doc.text('Pagina 1 di 1',W-mr,footerY+4,{align:'right'});
 
+  // Allinea il fatturato dell'ordine al totale del preventivo
+  o.tot=totaleCliente;
+  o.totStampa=rows[0]?rows[0].tot:0;
+  o.tsEdit=Date.now();
+  persist();
+  saveToDrive();
+
   const fname=`preventivo_${(o.nome||'cliente').replace(/\s+/g,'_')}_${o.ordNum}.pdf`;
   doc.save(fname);
-  showToast('📄 PDF scaricato!');
+  showToast('📄 PDF scaricato — fatturato aggiornato!');
 }
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTm);toastTm=setTimeout(()=>t.classList.remove('show'),3400);}
 </script>
