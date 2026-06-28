@@ -683,7 +683,7 @@ function showPage(p){
 }
 
 // ── DRIVE ──
-function persist(){localStorage.setItem(LS_DATA,JSON.stringify({orders,nextId}));}
+function persist(){localStorage.setItem(LS_DATA,JSON.stringify({orders,nextId,settings:{machineRate,designRate,myInfo}}));}
 async function loadFromDrive(){
   setSyncStatus('syncing','⏳ Caricamento…');
   try{
@@ -693,6 +693,7 @@ async function loadFromDrive(){
     }
     if(fid){const d=await(await fetch(`https://www.googleapis.com/drive/v3/files/${fid}?alt=media`,{headers:{Authorization:'Bearer '+accessToken}})).json();
       orders=d.orders||[];nextId=d.nextId||calcNextId();
+      if(d.settings){machineRate=Number(d.settings.machineRate)||machineRate;designRate=Number(d.settings.designRate)||designRate;if(d.settings.myInfo)myInfo=Object.assign({nome:'',tel:'',email:'',piva:'',sito:'',indirizzo:'',footer:''},d.settings.myInfo);}
       // Migrazione: ricalcola prof se è stringa vuota o NaN
       orders.forEach(o=>{
         const t=Number(o.tot)||0;const s=Number(o.spese)||0;
@@ -705,11 +706,11 @@ async function loadFromDrive(){
   }catch(e){tryLocalFallback();setSyncStatus('err','⚠ Offline');showToast('⚠️ Drive non raggiungibile — dati locali');}
   renderHome();renderOrders();renderContacts();
 }
-function tryLocalFallback(){try{const r=localStorage.getItem(LS_DATA);if(r){const d=JSON.parse(r);orders=d.orders||[];nextId=d.nextId||1;}}catch(e){}}
+function tryLocalFallback(){try{const r=localStorage.getItem(LS_DATA);if(r){const d=JSON.parse(r);orders=d.orders||[];nextId=d.nextId||1;if(d.settings){machineRate=Number(d.settings.machineRate)||machineRate;designRate=Number(d.settings.designRate)||designRate;if(d.settings.myInfo)myInfo=Object.assign({nome:'',tel:'',email:'',piva:'',sito:'',indirizzo:'',footer:''},d.settings.myInfo);}}}catch(e){}}
 async function saveToDrive(){
   if(!accessToken){persist();return;}
   setSyncStatus('syncing','⏳ Salvataggio…');
-  const body=JSON.stringify({orders,nextId,savedAt:new Date().toISOString(),version:4},null,2);
+  const body=JSON.stringify({orders,nextId,settings:{machineRate,designRate,myInfo},savedAt:new Date().toISOString(),version:4},null,2);
   try{
     if(driveFileId){await fetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`,{method:'PATCH',headers:{Authorization:'Bearer '+accessToken,'Content-Type':'application/json'},body});}
     else{const meta={name:FILE_NAME,parents:['appDataFolder']};const form=new FormData();form.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));form.append('file',new Blob([body],{type:'application/json'}));const res=await(await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',{method:'POST',headers:{Authorization:'Bearer '+accessToken},body:form})).json();driveFileId=res.id;localStorage.setItem(LS_FILEID,driveFileId);}
@@ -903,8 +904,10 @@ function saveSettingsPanel(){
   myInfo.indirizzo=document.getElementById('sIndirizzo').value.trim();
   myInfo.footer=document.getElementById('sFooter').value.trim();
   saveSettings();
+  persist();
+  saveToDrive();
   closeAll();
-  showToast('✅ Impostazioni salvate');
+  showToast('✅ Impostazioni salvate su Drive');
 }
 function onMatChange(){
   const id=document.getElementById('fMat').value;
