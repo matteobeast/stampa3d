@@ -960,9 +960,14 @@ function calcTotaleVendita(){
 
 document.getElementById('fTot').addEventListener('input',calcProf);
 function calcProf(){
-  const t=Number(document.getElementById('fTot').value)||0;
-  const s=Number(document.getElementById('fSpese').value)||0;
-  document.getElementById('fProf').value=(t>0||s>0)?(t-s).toFixed(2):'';
+  // Totale al cliente = stampa + progettazione
+  const tStampa=Number(document.getElementById('fTot').value)||0;
+  const tProgett=Number(document.getElementById('fCostoProgett').value)||0;
+  const totCliente=tStampa+tProgett;
+  // Spese interne = solo mat + macchina (NO progettazione)
+  const spese=Number(document.getElementById('fSpese').value)||0;
+  // Profitto = totale cliente - spese stampa
+  document.getElementById('fProf').value=(totCliente>0||spese>0)?(totCliente-spese).toFixed(2):'';
 }
 function saveOrder(){
   const nome=document.getElementById('fNome').value.trim();
@@ -974,7 +979,9 @@ function saveOrder(){
   const ordNum=document.getElementById('fOrdNum').value.trim()||String(nextId);
   const spese=Number(document.getElementById('fSpese').value)||0;
   const tot=Number(document.getElementById('fTot').value)||0;
-  const prof=tot>0||spese>0 ? (tot-spese) : null;
+  const costoProgettSave=Number(document.getElementById('fCostoProgett').value)||0;
+  const totCliente=tot+costoProgettSave;
+  const prof=totCliente>0||spese>0 ? (totCliente-spese) : null;
   const pesoPezzo=Number(document.getElementById('fPeso').value)||0;
   const qty=Number(document.getElementById('fQty').value)||1;
   const order={id,ts:existing?existing.ts:Date.now(),tsEdit:Date.now(),ordNum,nome,
@@ -995,7 +1002,7 @@ function saveOrder(){
     ore:document.getElementById('fOre').value,
     file:document.getElementById('fFile').value.trim(),
     prezzoUnit:Number(document.getElementById('fPrezzoUnit').value)||0,
-    spese:spese||0, tot:tot||0,
+    spese:spese||0, tot:totCliente||0, totStampa:tot||0,
     prof:prof!==null?prof:0,
     note:document.getElementById('fNote').value.trim()
   };
@@ -1227,175 +1234,209 @@ function dpSelect(popupId,day){
 
 // ── TOAST ──
 let toastTm;
-// ── PDF PREVENTIVO ──
+// ── PDF PREVENTIVO — stile Weerg ──
 function generatePDF(id){
   const o=orders.find(x=>x.id===id);
   if(!o){showToast('Ordine non trovato');return;}
   if(typeof window.jspdf==='undefined'){showToast('⏳ Libreria PDF in caricamento, riprova tra 2 secondi');return;}
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-  const W=210,ml=18,mr=18,cw=W-ml-mr;
+  const W=210,ml=16,mr=16,cw=W-ml-mr;
   let y=0;
 
-  // Colori
-  const C={accent:[26,86,160],text:[30,30,30],text2:[100,100,95],border:[220,218,212],green:[45,110,15],amber:[122,69,0],bg:[245,244,240],white:[255,255,255]};
-  const setC=(r,fill=true)=>fill?doc.setFillColor(...r):doc.setTextColor(...r);
+  const C={
+    accent:[26,86,219],      // blu Weerg
+    text:[20,20,20],
+    text2:[110,110,110],
+    border:[220,220,220],
+    bg:[247,248,250],
+    white:[255,255,255],
+    green:[30,130,60],
+  };
+  const rgb=(r,g,b,fill=true)=>fill?doc.setFillColor(r,g,b):doc.setTextColor(r,g,b);
 
-  // ── HEADER BLU ──
-  setC(C.accent);
-  doc.rect(0,0,W,38,'F');
-  doc.setTextColor(255,255,255);
+  // ── HEADER: logo/nome + dati fornitore ──
+  doc.setDrawColor(...C.border);
+  doc.setLineWidth(0.4);
+
+  // Nome fornitore grande (sinistra)
+  rgb(...C.accent,false);
   doc.setFont('helvetica','bold');
-  doc.setFontSize(20);
-  doc.text('PREVENTIVO',ml,16);
-  doc.setFontSize(10);
+  doc.setFontSize(22);
+  doc.text(myInfo.nome||'Stampa 3D',ml,16);
+
+  // Dati fornitore (destra)
   doc.setFont('helvetica','normal');
-  doc.text(`N° ${o.ordNum} · ${o.dataOrd||'—'}`,ml,23);
-  const stLabel={preventivo:'PREVENTIVO','in corso':'IN CORSO',completato:'COMPLETATO','in attesa':'IN ATTESA'}[o.stato]||o.stato.toUpperCase();
-  doc.setFont('helvetica','bold');doc.setFontSize(8);
-  doc.text(stLabel,W-mr,14,{align:'right'});
-  y=48;
+  doc.setFontSize(8);
+  rgb(...C.text2,false);
+  const righeF=[];
+  if(myInfo.indirizzo) righeF.push(myInfo.indirizzo);
+  if(myInfo.tel&&myInfo.email) righeF.push(`Tel: ${myInfo.tel}   Email: ${myInfo.email}`);
+  else if(myInfo.tel) righeF.push(`Tel: ${myInfo.tel}`);
+  else if(myInfo.email) righeF.push(`Email: ${myInfo.email}`);
+  if(myInfo.piva) righeF.push(`P. IVA: ${myInfo.piva}`);
+  if(myInfo.sito) righeF.push(myInfo.sito);
+  righeF.forEach((r,i)=>doc.text(r,W-mr,10+i*5,{align:'right'}));
 
-  // ── I MIEI DATI (fornitore) ──
-  if(myInfo.nome){
-    setC(C.bg);
-    const myH=8+(myInfo.tel||myInfo.email?6:0)+(myInfo.piva||myInfo.sito?6:0)+(myInfo.indirizzo?6:0);
-    doc.rect(ml,y-4,cw,myH+8,'F');
-    doc.setTextColor(...C.text2);doc.setFont('helvetica','bold');doc.setFontSize(7.5);
-    doc.text('FORNITORE',ml+4,y+1);
-    doc.setTextColor(...C.text);doc.setFont('helvetica','bold');doc.setFontSize(12);
-    doc.text(myInfo.nome,ml+4,y+8);
-    let my=y+14;
-    doc.setFont('helvetica','normal');doc.setFontSize(9);
-    if(myInfo.tel||myInfo.email){
-      if(myInfo.tel){doc.setTextColor(...C.text2);doc.text('Tel: ',ml+4,my);doc.setTextColor(...C.text);doc.text(myInfo.tel,ml+14,my);}
-      if(myInfo.email){doc.setTextColor(...C.text2);doc.text(myInfo.tel?'  Email: ':'Email: ',ml+(myInfo.tel?50:4),my);doc.setTextColor(...C.text);doc.text(myInfo.email,ml+(myInfo.tel?64:18),my);}
-      my+=6;
-    }
-    if(myInfo.piva||myInfo.sito){
-      if(myInfo.piva){doc.setTextColor(...C.text2);doc.text('P.IVA: ',ml+4,my);doc.setTextColor(...C.text);doc.text(myInfo.piva,ml+18,my);}
-      if(myInfo.sito){doc.setTextColor(...C.text2);doc.text(myInfo.piva?'  Web: ':'Web: ',ml+(myInfo.piva?60:4),my);doc.setTextColor(...C.text);doc.text(myInfo.sito,ml+(myInfo.piva?72:16),my);}
-      my+=6;
-    }
-    if(myInfo.indirizzo){doc.setTextColor(...C.text2);doc.text('Indirizzo: ',ml+4,my);doc.setTextColor(...C.text);doc.text(myInfo.indirizzo,ml+26,my);my+=6;}
-    y+=myH+10;
-  }
+  // Linea separatrice
+  y=22;
+  doc.line(ml,y,W-mr,y);
+  y+=8;
 
-  // ── DATI CLIENTE ──
-  const clientH=o.tel&&o.email?32:o.tel||o.email?26:20;
-  setC(C.bg);doc.rect(ml,y-4,cw,clientH,'F');
-  doc.setTextColor(...C.text2);doc.setFont('helvetica','bold');doc.setFontSize(7.5);
-  doc.text('CLIENTE',ml+4,y+1);
-  doc.setTextColor(...C.text);doc.setFont('helvetica','bold');doc.setFontSize(12);
-  doc.text(o.nome||'—',ml+4,y+8);
-  doc.setFont('helvetica','normal');doc.setFontSize(9);
-  if(o.tel){doc.setTextColor(...C.text2);doc.text('Tel: ',ml+4,y+14);doc.setTextColor(...C.text);doc.text(o.tel,ml+14,y+14);}
-  if(o.email){doc.setTextColor(...C.text2);doc.text('Email: ',ml+4,y+(o.tel?20:14));doc.setTextColor(...C.text);doc.text(o.email,ml+18,y+(o.tel?20:14));}
-  y+=clientH+6;
-
-  // ── DESCRIZIONE ──
-  doc.setFont('helvetica','bold');doc.setFontSize(13);
-  doc.setTextColor(...C.text);
-  doc.text(o.desc||'—',ml,y);
+  // ── TITOLO + NUMERO ──
+  rgb(...C.accent,false);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(18);
+  doc.text('Preventivo',ml,y);
   y+=7;
+  rgb(...C.text2,false);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  doc.text(`N°: ${o.ordNum||'—'}     Creato il: ${o.dataOrd||new Date().toLocaleDateString('it')}`,ml,y);
   if(o.dataCons){
-    doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(...C.text2);
-    doc.text(`Data consegna prevista: ${o.dataCons}`,ml,y);y+=5;
+    rgb(...C.accent,false);
+    doc.setFont('helvetica','bold');
+    doc.text(`Consegna prevista: ${o.dataCons}`,W-mr,y,{align:'right'});
   }
+  y+=10;
+
+  // ── BLOCCO CLIENTE ──
+  doc.line(ml,y,W-mr,y);
+  y+=5;
+  rgb(...C.text2,false);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(7.5);
+  doc.text('CLIENTE',ml,y);
+  y+=5;
+  rgb(...C.text,false);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(11);
+  doc.text(o.nome||'—',ml,y);
+  y+=5;
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(8.5);
+  rgb(...C.text2,false);
+  if(o.tel){doc.text(`Tel: ${o.tel}`,ml,y);y+=4.5;}
+  if(o.email){doc.text(`Email: ${o.email}`,ml,y);y+=4.5;}
   y+=4;
 
-  // ── LINEA ──
-  doc.setDrawColor(...C.border);doc.setLineWidth(0.3);doc.line(ml,y,W-mr,y);y+=6;
-
   // ── TABELLA VOCI ──
+  doc.line(ml,y,W-mr,y);
+  y+=1;
+
+  // Header tabella
+  rgb(...C.bg);doc.rect(ml,y,cw,8,'F');
+  rgb(...C.text2,false);doc.setFont('helvetica','bold');doc.setFontSize(7.5);
+  doc.text('DESCRIZIONE',ml+3,y+5.2);
+  doc.text('QTÀ',ml+100,y+5.2,{align:'center'});
+  doc.text('PREZZO/PZ',ml+130,y+5.2,{align:'center'});
+  doc.text('TOTALE',W-mr-3,y+5.2,{align:'right'});
+  y+=8;
+  doc.setDrawColor(...C.border);doc.line(ml,y,W-mr,y);
+
   const rows=[];
-  // Stampa 3D — solo voci commerciali, nessun dato interno (ore, peso, costo materiale)
-  const qtaLabel=o.qty>1?`${o.qty} pz`:'1 pz';
-  if(o.prezzoUnit&&o.qty){
-    rows.push([
-      'Stampa 3D',
-      o.qty>1?`${o.qty} pz × € ${fm(o.prezzoUnit)}/pz`:'1 pz',
-      `€ ${fm(o.prezzoUnit*(o.qty||1))}`
-    ]);
-  } else if(o.tot){
-    rows.push(['Stampa 3D',o.desc||'—',`€ ${fm(o.tot)}`]);
-  }
-  // Progettazione — mostrata solo se presente, con tariffa oraria
-  if(o.oreProgett&&o.costoProgett){
-    const tariffaOra=o.oreProgett>0?(o.costoProgett/o.oreProgett):designRate;
-    rows.push(['Progettazione CAD',`${o.oreProgett} h × € ${fm(tariffaOra)}/h`,`€ ${fm(o.costoProgett)}`]);
-  }
 
-  if(rows.length){
-    // header tabella
-    setC(C.accent);doc.rect(ml,y,cw,7,'F');
-    doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(8);
-    doc.text('VOCE',ml+3,y+4.8);
-    doc.text('DETTAGLIO',ml+45,y+4.8);
-    doc.text('IMPORTO',W-mr-3,y+4.8,{align:'right'});
-    y+=7;
-
-    rows.forEach((r,i)=>{
-      const rh=10;
-      setC(i%2===0?C.white:C.bg);doc.rect(ml,y,cw,rh,'F');
-      doc.setTextColor(...C.text);doc.setFont('helvetica','bold');doc.setFontSize(8.5);
-      doc.text(r[0],ml+3,y+6.5);
-      doc.setFont('helvetica','normal');doc.setFontSize(7.5);doc.setTextColor(...C.text2);
-      doc.text(r[1],ml+45,y+6.5);
-      doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(...C.text);
-      doc.text(r[2],W-mr-3,y+6.5,{align:'right'});
-      y+=rh;
+  // Riga stampa 3D
+  const prezzoStampa=o.prezzoUnit?Number(o.prezzoUnit):0;
+  const qta=Number(o.qty)||1;
+  const totStampa=prezzoStampa*qta;
+  if(prezzoStampa>0){
+    rows.push({
+      desc:'Stampa 3D',
+      sub: o.desc||'',
+      qty: qta,
+      ppu: prezzoStampa,
+      tot: totStampa,
     });
-    y+=4;
+  } else if(o.tot){
+    rows.push({desc:'Stampa 3D',sub:o.desc||'',qty:qta,ppu:null,tot:Number(o.tot)});
   }
+
+  // Riga progettazione (se presente)
+  const costoProgett=Number(o.costoProgett)||0;
+  if(o.oreProgett&&costoProgett>0){
+    const tarH=costoProgett/(Number(o.oreProgett)||1);
+    rows.push({
+      desc:'Progettazione CAD',
+      sub:`${o.oreProgett} h × € ${fm(tarH)}/h`,
+      qty:null,
+      ppu:null,
+      tot:costoProgett,
+    });
+  }
+
+  rows.forEach((r,i)=>{
+    const rh=r.sub?14:10;
+    if(i%2===1){rgb(...C.bg);doc.rect(ml,y,cw,rh,'F');}
+    // Descrizione
+    rgb(...C.text,false);doc.setFont('helvetica','bold');doc.setFontSize(9);
+    doc.text(r.desc,ml+3,y+5.5);
+    if(r.sub){rgb(...C.text2,false);doc.setFont('helvetica','normal');doc.setFontSize(7.5);doc.text(r.sub,ml+3,y+10.5);}
+    // Qtà
+    if(r.qty!==null){rgb(...C.text,false);doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text(String(r.qty),ml+100,y+5.5,{align:'center'});}
+    // Prezzo/pz
+    if(r.ppu!==null){doc.text(`€ ${fm(r.ppu)}`,ml+130,y+5.5,{align:'center'});}
+    // Totale riga
+    doc.setFont('helvetica','bold');doc.text(`€ ${fm(r.tot)}`,W-mr-3,y+5.5,{align:'right'});
+    y+=rh;
+    doc.setDrawColor(...C.border);doc.line(ml,y,W-mr,y);
+  });
 
   // ── TOTALE ──
-  doc.setDrawColor(...C.border);doc.line(ml,y,W-mr,y);y+=5;
-  const totX=W-mr-60;
-  // Subtotale stampa se c'è anche progettazione
-  if(o.oreProgett&&o.costoProgett&&o.prezzoUnit){
-    doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(...C.text2);
-    doc.text('Subtotale stampa:',totX,y);
-    doc.setFont('helvetica','bold');doc.setTextColor(...C.text);
-    doc.text(`€ ${fm(o.prezzoUnit*(o.qty||1))}`,W-mr,y,{align:'right'});y+=6;
-    doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(...C.text2);
-    doc.text('Progettazione CAD:',totX,y);
-    doc.setFont('helvetica','bold');doc.setTextColor(...C.text);
-    doc.text(`€ ${fm(o.costoProgett)}`,W-mr,y,{align:'right'});y+=6;
+  y+=4;
+  // Totale = stampa + progettazione (quello che paga il cliente)
+  const totaleCliente=rows.reduce((s,r)=>s+(r.tot||0),0);
+
+  // Eventuale subtotale se ci sono più voci
+  if(rows.length>1){
+    rgb(...C.text2,false);doc.setFont('helvetica','normal');doc.setFontSize(9);
+    doc.text('Subtotale:',W-mr-60,y);
+    rgb(...C.text,false);doc.setFont('helvetica','bold');
+    doc.text(`€ ${fm(rows[0].tot)}`,W-mr-3,y,{align:'right'});
+    y+=6;
+    rgb(...C.text2,false);doc.setFont('helvetica','normal');
+    doc.text('Progettazione:',W-mr-60,y);
+    rgb(...C.text,false);doc.setFont('helvetica','bold');
+    doc.text(`€ ${fm(rows[1].tot)}`,W-mr-3,y,{align:'right'});
+    y+=8;
   }
-  if(o.tot){
-    setC(C.accent);doc.rect(totX-4,y-5,cw-(totX-ml-4)+4,10,'F');
-    doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(12);
-    doc.text('TOTALE:',totX,y+1.5);
-    doc.text(`€ ${fm(o.tot)}`,W-mr-2,y+1.5,{align:'right'});
-    y+=14;
-  }
+
+  // Box totale finale
+  doc.setDrawColor(...C.border);doc.line(W-mr-70,y,W-mr,y);
+  y+=1;
+  rgb(...C.text2,false);doc.setFont('helvetica','normal');doc.setFontSize(9);
+  doc.text('Totale ordine (IVA non inclusa)',W-mr-67,y+5);
+  rgb(...C.accent,false);doc.setFont('helvetica','bold');doc.setFontSize(15);
+  doc.text(`€ ${fm(totaleCliente)}`,W-mr,y+6,{align:'right'});
+  y+=16;
 
   // ── NOTE ──
   if(o.note){
     y+=4;
-    setC(C.bg);
-    const noteLines=doc.splitTextToSize(o.note,cw-8);
-    const noteH=noteLines.length*5+10;
-    doc.rect(ml,y,cw,noteH,'F');
-    doc.setTextColor(...C.text2);doc.setFont('helvetica','bold');doc.setFontSize(7.5);
+    rgb(...C.bg);
+    const nl=doc.splitTextToSize(o.note,cw-8);
+    const nh=nl.length*5+10;
+    doc.rect(ml,y,cw,nh,'F');
+    rgb(...C.text2,false);doc.setFont('helvetica','bold');doc.setFontSize(7.5);
     doc.text('NOTE',ml+4,y+5);
-    doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(...C.text);
-    doc.text(noteLines,ml+4,y+11);
-    y+=noteH+4;
+    doc.setFont('helvetica','normal');doc.setFontSize(8.5);
+    rgb(...C.text,false);
+    doc.text(nl,ml+4,y+11);
+    y+=nh+4;
   }
 
   // ── FOOTER ──
-  doc.setDrawColor(...C.border);doc.line(ml,280,W-mr,280);
-  doc.setFont('helvetica','normal');doc.setFontSize(7.5);doc.setTextColor(...C.text2);
-  doc.text(myInfo.footer||'Documento generato da Stampa3D Manager',ml,285);
-  doc.text(`Pagina 1 di 1`,W-mr,285,{align:'right'});
+  const footerY=282;
+  doc.setDrawColor(...C.border);doc.line(ml,footerY,W-mr,footerY);
+  rgb(...C.text2,false);doc.setFont('helvetica','normal');doc.setFontSize(7);
+  const footerTxt=myInfo.footer||'I prezzi indicati sono al netto di IVA e spese di spedizione.';
+  doc.text(footerTxt,ml,footerY+4);
+  doc.text('Pagina 1 di 1',W-mr,footerY+4,{align:'right'});
 
   const fname=`preventivo_${(o.nome||'cliente').replace(/\s+/g,'_')}_${o.ordNum}.pdf`;
   doc.save(fname);
   showToast('📄 PDF scaricato!');
 }
-
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTm);toastTm=setTimeout(()=>t.classList.remove('show'),3400);}
 </script>
 </body>
