@@ -1324,16 +1324,17 @@ function generatePDF(id){
   const prezzoStampa=Number(o.prezzoUnit)||0;
   const qta=Number(o.qty)||1;
   const totStampa=prezzoStampa>0?prezzoStampa*qta:(Number(o.totStampa)||Number(o.tot)||0);
+  const matLabel=o.mat?`Materiale: ${o.mat}`:'';
   if(prezzoStampa>0){
     rows.push({
       desc: o.desc||'Stampa 3D',
-      sub: null,
+      sub: matLabel||null,
       qty: qta,
       ppu: prezzoStampa,
       tot: totStampa,
     });
   } else if(o.tot){
-    rows.push({desc:o.desc||'Stampa 3D',sub:null,qty:qta,ppu:null,tot:Number(o.tot)});
+    rows.push({desc:o.desc||'Stampa 3D',sub:matLabel||null,qty:qta,ppu:null,tot:Number(o.tot)});
   }
 
   // Riga progettazione (se presente)
