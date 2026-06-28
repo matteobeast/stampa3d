@@ -490,6 +490,20 @@ select option{background:var(--s2)}
   <div class="ph"><h2>Impostazioni</h2><button class="ph-x" onclick="closeAll()">✕</button></div>
   <div class="pb">
     <div class="fs">
+      <div class="fs-t">I tuoi dati (appaiono nel PDF preventivo)</div>
+      <div class="fr"><label class="fl">Nome / Ragione sociale</label><input type="text" id="sNome" placeholder="Es. Matteo Bianchi"></div>
+      <div class="fr2">
+        <div><label class="fl">Telefono</label><input type="tel" id="sTel" placeholder="+39 333…"></div>
+        <div><label class="fl">Email</label><input type="text" id="sEmail" placeholder="matteo@…"></div>
+      </div>
+      <div class="fr2">
+        <div><label class="fl">P.IVA / CF <span style="font-size:10px;color:var(--text3)">(facoltativo — se vuoto non appare nel PDF)</span></label><input type="text" id="sPiva" placeholder="IT12345678901 — lascia vuoto se non la possiedi"></div>
+        <div><label class="fl">Sito web</label><input type="text" id="sSito" placeholder="www.tuosito.com"></div>
+      </div>
+      <div class="fr"><label class="fl">Indirizzo <span style="font-size:10px;color:var(--text3)">(facoltativo)</span></label><input type="text" id="sIndirizzo" placeholder="Via Roma 1, Milano"></div>
+      <div class="fr"><label class="fl">Testo piè di pagina PDF (opzionale)</label><input type="text" id="sFooter" placeholder="Es. Pagamento entro 30 giorni — IBAN IT00…"></div>
+    </div>
+    <div class="fs">
       <div class="fs-t">Costo deperimento macchina</div>
       <div class="fr">
         <label class="fl">Tariffa oraria stampa (€/ora)</label>
@@ -540,8 +554,9 @@ let viewMode='card';
 let period='tutto';
 let machineRate=0;
 let designRate=0;
-function loadSettings(){try{const s=localStorage.getItem(LS_SETTINGS);if(s){const d=JSON.parse(s);machineRate=Number(d.machineRate)||0;designRate=Number(d.designRate)||0;}}catch(e){}}
-function saveSettings(){localStorage.setItem(LS_SETTINGS,JSON.stringify({machineRate,designRate}));}
+let myInfo={nome:'',tel:'',email:'',piva:'',sito:'',indirizzo:'',footer:''};
+function loadSettings(){try{const s=localStorage.getItem(LS_SETTINGS);if(s){const d=JSON.parse(s);machineRate=Number(d.machineRate)||0;designRate=Number(d.designRate)||0;if(d.myInfo)myInfo=Object.assign({nome:'',tel:'',email:'',piva:'',sito:'',indirizzo:'',footer:''},d.myInfo);}}catch(e){}}
+function saveSettings(){localStorage.setItem(LS_SETTINGS,JSON.stringify({machineRate,designRate,myInfo}));}
 
 // ── LISTINO MATERIALI BAMBU LAB (€/kg — store EU, giugno 2026) ──
 const MATERIALI = [
@@ -868,11 +883,25 @@ function openNew(){
 function openSettings(){
   document.getElementById('sMachineRate').value=machineRate||'';
   document.getElementById('sDesignRate').value=designRate||'';
+  document.getElementById('sNome').value=myInfo.nome||'';
+  document.getElementById('sTel').value=myInfo.tel||'';
+  document.getElementById('sEmail').value=myInfo.email||'';
+  document.getElementById('sPiva').value=myInfo.piva||'';
+  document.getElementById('sSito').value=myInfo.sito||'';
+  document.getElementById('sIndirizzo').value=myInfo.indirizzo||'';
+  document.getElementById('sFooter').value=myInfo.footer||'';
   openPanel('pSettings');
 }
 function saveSettingsPanel(){
   machineRate=Number(document.getElementById('sMachineRate').value)||0;
   designRate=Number(document.getElementById('sDesignRate').value)||0;
+  myInfo.nome=document.getElementById('sNome').value.trim();
+  myInfo.tel=document.getElementById('sTel').value.trim();
+  myInfo.email=document.getElementById('sEmail').value.trim();
+  myInfo.piva=document.getElementById('sPiva').value.trim();
+  myInfo.sito=document.getElementById('sSito').value.trim();
+  myInfo.indirizzo=document.getElementById('sIndirizzo').value.trim();
+  myInfo.footer=document.getElementById('sFooter').value.trim();
   saveSettings();
   closeAll();
   showToast('✅ Impostazioni salvate');
@@ -1222,22 +1251,47 @@ function generatePDF(id){
   doc.setFontSize(10);
   doc.setFont('helvetica','normal');
   doc.text(`N° ${o.ordNum} · ${o.dataOrd||'—'}`,ml,23);
-  // badge stato
   const stLabel={preventivo:'PREVENTIVO','in corso':'IN CORSO',completato:'COMPLETATO','in attesa':'IN ATTESA'}[o.stato]||o.stato.toUpperCase();
   doc.setFont('helvetica','bold');doc.setFontSize(8);
   doc.text(stLabel,W-mr,14,{align:'right'});
   y=48;
 
+  // ── I MIEI DATI (fornitore) ──
+  if(myInfo.nome){
+    setC(C.bg);
+    const myH=8+(myInfo.tel||myInfo.email?6:0)+(myInfo.piva||myInfo.sito?6:0)+(myInfo.indirizzo?6:0);
+    doc.rect(ml,y-4,cw,myH+8,'F');
+    doc.setTextColor(...C.text2);doc.setFont('helvetica','bold');doc.setFontSize(7.5);
+    doc.text('FORNITORE',ml+4,y+1);
+    doc.setTextColor(...C.text);doc.setFont('helvetica','bold');doc.setFontSize(12);
+    doc.text(myInfo.nome,ml+4,y+8);
+    let my=y+14;
+    doc.setFont('helvetica','normal');doc.setFontSize(9);
+    if(myInfo.tel||myInfo.email){
+      if(myInfo.tel){doc.setTextColor(...C.text2);doc.text('Tel: ',ml+4,my);doc.setTextColor(...C.text);doc.text(myInfo.tel,ml+14,my);}
+      if(myInfo.email){doc.setTextColor(...C.text2);doc.text(myInfo.tel?'  Email: ':'Email: ',ml+(myInfo.tel?50:4),my);doc.setTextColor(...C.text);doc.text(myInfo.email,ml+(myInfo.tel?64:18),my);}
+      my+=6;
+    }
+    if(myInfo.piva||myInfo.sito){
+      if(myInfo.piva){doc.setTextColor(...C.text2);doc.text('P.IVA: ',ml+4,my);doc.setTextColor(...C.text);doc.text(myInfo.piva,ml+18,my);}
+      if(myInfo.sito){doc.setTextColor(...C.text2);doc.text(myInfo.piva?'  Web: ':'Web: ',ml+(myInfo.piva?60:4),my);doc.setTextColor(...C.text);doc.text(myInfo.sito,ml+(myInfo.piva?72:16),my);}
+      my+=6;
+    }
+    if(myInfo.indirizzo){doc.setTextColor(...C.text2);doc.text('Indirizzo: ',ml+4,my);doc.setTextColor(...C.text);doc.text(myInfo.indirizzo,ml+26,my);my+=6;}
+    y+=myH+10;
+  }
+
   // ── DATI CLIENTE ──
-  setC(C.bg);doc.rect(ml,y-4,cw,o.email?28:22,'F');
+  const clientH=o.tel&&o.email?32:o.tel||o.email?26:20;
+  setC(C.bg);doc.rect(ml,y-4,cw,clientH,'F');
   doc.setTextColor(...C.text2);doc.setFont('helvetica','bold');doc.setFontSize(7.5);
   doc.text('CLIENTE',ml+4,y+1);
   doc.setTextColor(...C.text);doc.setFont('helvetica','bold');doc.setFontSize(12);
   doc.text(o.nome||'—',ml+4,y+8);
   doc.setFont('helvetica','normal');doc.setFontSize(9);
   if(o.tel){doc.setTextColor(...C.text2);doc.text('Tel: ',ml+4,y+14);doc.setTextColor(...C.text);doc.text(o.tel,ml+14,y+14);}
-  if(o.email){doc.setTextColor(...C.text2);doc.text('Email: ',ml+4,y+20);doc.setTextColor(...C.text);doc.text(o.email,ml+18,y+20);}
-  y+=o.email?34:28;
+  if(o.email){doc.setTextColor(...C.text2);doc.text('Email: ',ml+4,y+(o.tel?20:14));doc.setTextColor(...C.text);doc.text(o.email,ml+18,y+(o.tel?20:14));}
+  y+=clientH+6;
 
   // ── DESCRIZIONE ──
   doc.setFont('helvetica','bold');doc.setFontSize(13);
@@ -1255,15 +1309,22 @@ function generatePDF(id){
 
   // ── TABELLA VOCI ──
   const rows=[];
-  // Voce principale: pezzi stampati con prezzo unitario
-  if(o.qty&&o.prezzoUnit){
-    rows.push([`Stampa 3D — ${o.desc||''}`,`${o.qty} pz × € ${fm(o.prezzoUnit)}/pz`,`€ ${fm(o.prezzoUnit*o.qty)}`]);
-  } else if(o.mat&&o.peso){
-    rows.push(['Materiale di stampa',`${o.mat} — ${o.qty||1} pz × ${o.pesoPezzo||o.peso}g = ${o.peso}g tot.`,o.costoMat?`€ ${fm(o.costoMat)}`:'—']);
-    if(o.ore) rows.push(['Stampa 3D',`${o.ore} ore di stampa`,o.costoMacchina?`€ ${fm(o.costoMacchina)}`:'—']);
+  // Stampa 3D — solo voci commerciali, nessun dato interno (ore, peso, costo materiale)
+  const qtaLabel=o.qty>1?`${o.qty} pz`:'1 pz';
+  if(o.prezzoUnit&&o.qty){
+    rows.push([
+      'Stampa 3D',
+      o.qty>1?`${o.qty} pz × € ${fm(o.prezzoUnit)}/pz`:'1 pz',
+      `€ ${fm(o.prezzoUnit*(o.qty||1))}`
+    ]);
+  } else if(o.tot){
+    rows.push(['Stampa 3D',o.desc||'—',`€ ${fm(o.tot)}`]);
   }
-  // Progettazione: sempre mostrata separatamente se presente
-  if(o.oreProgett) rows.push(['Progettazione CAD',`${o.oreProgett} h × € ${fm(o.costoProgett/o.oreProgett||designRate)}/h`,o.costoProgett?`€ ${fm(o.costoProgett)}`:'—']);
+  // Progettazione — mostrata solo se presente, con tariffa oraria
+  if(o.oreProgett&&o.costoProgett){
+    const tariffaOra=o.oreProgett>0?(o.costoProgett/o.oreProgett):designRate;
+    rows.push(['Progettazione CAD',`${o.oreProgett} h × € ${fm(tariffaOra)}/h`,`€ ${fm(o.costoProgett)}`]);
+  }
 
   if(rows.length){
     // header tabella
@@ -1327,7 +1388,7 @@ function generatePDF(id){
   // ── FOOTER ──
   doc.setDrawColor(...C.border);doc.line(ml,280,W-mr,280);
   doc.setFont('helvetica','normal');doc.setFontSize(7.5);doc.setTextColor(...C.text2);
-  doc.text('Documento generato da Stampa3D Manager',ml,285);
+  doc.text(myInfo.footer||'Documento generato da Stampa3D Manager',ml,285);
   doc.text(`Pagina 1 di 1`,W-mr,285,{align:'right'});
 
   const fname=`preventivo_${(o.nome||'cliente').replace(/\s+/g,'_')}_${o.ordNum}.pdf`;
