@@ -1300,25 +1300,9 @@ function generatePDF(id){
   }
   y+=10;
 
-  // ── BLOCCO CLIENTE ──
+  // Linea separatrice dopo header
   doc.line(ml,y,W-mr,y);
-  y+=5;
-  rgb(...C.text2,false);
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(7.5);
-  doc.text('CLIENTE',ml,y);
-  y+=5;
-  rgb(...C.text,false);
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(11);
-  doc.text(o.nome||'—',ml,y);
-  y+=5;
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(8.5);
-  rgb(...C.text2,false);
-  if(o.tel){doc.text(`Tel: ${o.tel}`,ml,y);y+=4.5;}
-  if(o.email){doc.text(`Email: ${o.email}`,ml,y);y+=4.5;}
-  y+=4;
+  y+=8;
 
   // ── TABELLA VOCI ──
   doc.line(ml,y,W-mr,y);
@@ -1341,6 +1325,7 @@ function generatePDF(id){
   const qta=Number(o.qty)||1;
   const totStampa=prezzoStampa*qta;
   if(prezzoStampa>0){
+    const subDesc=[o.desc||''].filter(Boolean);
     rows.push({
       desc:'Sev4s3D',
       sub: o.desc||'',
@@ -1374,10 +1359,15 @@ function generatePDF(id){
     if(r.sub){rgb(...C.text2,false);doc.setFont('helvetica','normal');doc.setFontSize(7.5);doc.text(r.sub,ml+3,y+10.5);}
     // Qtà
     if(r.qty!==null){rgb(...C.text,false);doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text(String(r.qty),ml+100,y+5.5,{align:'center'});}
-    // Prezzo/pz
-    if(r.ppu!==null){doc.text(`€ ${fm(r.ppu)}`,ml+130,y+5.5,{align:'center'});}
-    // Totale riga
-    doc.setFont('helvetica','bold');doc.text(`€ ${fm(r.tot)}`,W-mr-3,y+5.5,{align:'right'});
+    // Prezzo/pz con etichetta chiara
+    if(r.ppu!==null){
+      doc.setFont('helvetica','normal');doc.setFontSize(9);
+      doc.text(`€ ${fm(r.ppu)} / pz`,ml+130,y+5.5,{align:'center'});
+    }
+    // Totale riga in grassetto blu
+    rgb(...C.accent,false);doc.setFont('helvetica','bold');doc.setFontSize(10);
+    doc.text(`€ ${fm(r.tot)}`,W-mr-3,y+5.5,{align:'right'});
+    rgb(...C.text,false);doc.setFontSize(9);
     y+=rh;
     doc.setDrawColor(...C.border);doc.line(ml,y,W-mr,y);
   });
