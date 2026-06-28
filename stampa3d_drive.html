@@ -1350,24 +1350,43 @@ function generatePDF(id){
     });
   }
 
+  // Larghezze colonne
+  const colDesc=ml+3;       // descrizione — da qui fino a colQta
+  const colQta=ml+95;       // centro colonna Qtà
+  const colPpu=ml+130;      // centro colonna Prezzo/pz
+  const colTot=W-mr-3;      // destra colonna Totale
+
   rows.forEach((r,i)=>{
-    const rh=r.sub?14:10;
+    const rh=r.sub?16:11;
     if(i%2===1){rgb(...C.bg);doc.rect(ml,y,cw,rh,'F');}
-    // Descrizione
+
+    // Nome voce (grassetto)
     rgb(...C.text,false);doc.setFont('helvetica','bold');doc.setFontSize(9);
-    doc.text(r.desc,ml+3,y+5.5);
-    if(r.sub){rgb(...C.text2,false);doc.setFont('helvetica','normal');doc.setFontSize(7.5);doc.text(r.sub,ml+3,y+10.5);}
-    // Qtà
-    if(r.qty!==null){rgb(...C.text,false);doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text(String(r.qty),ml+100,y+5.5,{align:'center'});}
-    // Prezzo/pz con etichetta chiara
-    if(r.ppu!==null){
-      doc.setFont('helvetica','normal');doc.setFontSize(9);
-      doc.text(`€ ${fm(r.ppu)} / pz`,ml+130,y+5.5,{align:'center'});
+    doc.text(r.desc,colDesc,y+6);
+
+    // Sottotitolo descrizione (grigio, riga sotto)
+    if(r.sub){
+      rgb(...C.text2,false);doc.setFont('helvetica','normal');doc.setFontSize(8);
+      const subTrunc=r.sub.length>38?r.sub.slice(0,36)+'…':r.sub;
+      doc.text(subTrunc,colDesc,y+12);
     }
-    // Totale riga in grassetto blu
+
+    // Quantità (centrata)
+    if(r.qty!==null){
+      rgb(...C.text,false);doc.setFont('helvetica','normal');doc.setFontSize(9);
+      doc.text(String(r.qty),colQta,y+6,{align:'center'});
+    }
+
+    // Prezzo per pezzo (centrato)
+    if(r.ppu!==null){
+      rgb(...C.text,false);doc.setFont('helvetica','normal');doc.setFontSize(9);
+      doc.text(`€ ${fm(r.ppu)} / pz`,colPpu,y+6,{align:'center'});
+    }
+
+    // Totale riga (blu, grassetto, destra)
     rgb(...C.accent,false);doc.setFont('helvetica','bold');doc.setFontSize(10);
-    doc.text(`€ ${fm(r.tot)}`,W-mr-3,y+5.5,{align:'right'});
-    rgb(...C.text,false);doc.setFontSize(9);
+    doc.text(`€ ${fm(r.tot)}`,colTot,y+6,{align:'right'});
+
     y+=rh;
     doc.setDrawColor(...C.border);doc.line(ml,y,W-mr,y);
   });
