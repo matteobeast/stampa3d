@@ -468,10 +468,10 @@ select option{background:var(--s2)}
       </div>
       <div class="fr3">
         <div><label class="fl">Spese stampa (€) <span style="font-size:10px;color:var(--text3)">mat.+macch.</span></label><input type="number" id="fSpese" placeholder="auto" step="0.01" readonly style="background:var(--s3);color:var(--amber)"></div>
-        <div><label class="fl">Ore progett. (tracciato)</label><input type="number" id="fOreProgettDisplay" placeholder="—" step="0.01" readonly style="background:var(--s3);color:var(--accent-t)"></div>
+        <div><label class="fl">Costo progett. (€) <span style="font-size:10px;color:var(--text3)">nel pdf, no spesa</span></label><input type="number" id="fCostoProgett" placeholder="—" step="0.01" readonly style="background:var(--s3);color:var(--accent-t)"></div>
         <div><label class="fl">Profitto netto (€)</label><input type="number" id="fProf" placeholder="auto" step="0.01" readonly style="background:var(--s3);color:var(--green)"></div>
       </div>
-      <div style="font-size:11px;color:var(--text3);margin-top:-4px;margin-bottom:10px">⚠️ Le ore di progettazione non vengono sottratte al profitto — sono solo tracciate nel preventivo.</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:-4px;margin-bottom:10px">💡 Il costo progettazione appare nel PDF al cliente ma non viene sottratto al tuo profitto.</div>
     </div>
     <div class="fs">
       <div class="fs-t">Note</div>
@@ -883,7 +883,7 @@ function openNew(){
   document.getElementById('fTitle').textContent='Nuovo ordine';
   document.getElementById('fId').value='';
   ['fNome','fTel','fEmail','fDesc','fOrdNum','fDataOrd','fDataCons','fFile','fNote'].forEach(id=>document.getElementById(id).value='');
-  ['fQty','fPeso','fPesoTot','fOre','fOreProgett','fSpese','fTot','fProf','fCostoMat','fCostoMacchina','fCostoProgett','fPrezzoUnit','fOreProgettDisplay'].forEach(id=>document.getElementById(id).value='');
+  ['fQty','fPeso','fPesoTot','fOre','fOreProgett','fSpese','fTot','fProf','fCostoMat','fCostoMacchina','fCostoProgett','fPrezzoUnit'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('fMat').value='';document.getElementById('fMatAltroWrap').style.display='none';
   document.getElementById('fStato').value='preventivo';document.getElementById('fProgett').value='';
   document.getElementById('fOrdNum').placeholder='#'+nextId;
@@ -1495,8 +1495,8 @@ function generatePDF(id){
   const footerY=282;
   doc.setDrawColor(...C.border);doc.line(ml,footerY,W-mr,footerY);
   rgb(...C.text2,false);doc.setFont('helvetica','normal');doc.setFontSize(7);
-  const footerTxt=myInfo.footer||'I prezzi indicati sono al netto di IVA e spese di spedizione.';
-  doc.text(footerTxt,ml,footerY+4);
+  const footerTxt=myInfo.footer||'';
+  if(footerTxt) doc.text(footerTxt,ml,footerY+4);
   doc.text('Pagina 1 di 1',W-mr,footerY+4,{align:'right'});
 
   const fname=`preventivo_${(o.nome||'cliente').replace(/\s+/g,'_')}_${o.ordNum}.pdf`;
