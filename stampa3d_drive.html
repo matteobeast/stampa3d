@@ -463,8 +463,8 @@ select option{background:var(--s2)}
     <div class="fs">
       <div class="fs-t">Economia</div>
       <div class="fr2">
-        <div><label class="fl">Prezzo unitario (€/pz)</label><input type="number" id="fPrezzoUnit" placeholder="0.00" step="0.01" min="0" oninput="calcTotaleVendita()"></div>
-        <div><label class="fl">Totale vendita (€) <span style="font-size:10px;color:var(--text3)">auto da pz×prezzo</span></label><input type="number" id="fTot" placeholder="0.00" step="0.01" min="0" oninput="calcProf()"></div>
+        <div><label class="fl">Prezzo unitario (€/pz)</label><input type="number" id="fPrezzoUnit" placeholder="0.00" step="0.01" min="0" oninput="calcDaPrezzoUnit()"></div>
+        <div><label class="fl">Totale vendita (€)</label><input type="number" id="fTot" placeholder="0.00" step="0.01" min="0" oninput="calcDaTotale()"></div>
       </div>
       <div class="fr3">
         <div><label class="fl">Spese stampa (€) <span style="font-size:10px;color:var(--text3)">mat.+macch.</span></label><input type="number" id="fSpese" placeholder="auto" step="0.01" readonly style="background:var(--s3);color:var(--amber)"></div>
@@ -489,6 +489,20 @@ select option{background:var(--s2)}
   <div class="ph-h"></div>
   <div class="ph"><h2>Impostazioni</h2><button class="ph-x" onclick="closeAll()">✕</button></div>
   <div class="pb">
+    <div class="fs">
+      <div class="fs-t">Logo (appare nel PDF preventivo)</div>
+      <div class="fr" style="display:flex;align-items:center;gap:12px">
+        <img id="logoPreview" src="" alt="" style="width:80px;height:56px;object-fit:contain;border:.5px solid var(--border);border-radius:6px;background:var(--s3);display:none">
+        <div style="flex:1">
+          <label style="display:inline-block;background:var(--accent);color:#fff;border-radius:6px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer">
+            📁 Scegli immagine
+            <input type="file" id="sLogoFile" accept="image/*" style="display:none" onchange="loadLogo(this)">
+          </label>
+          <button onclick="removeLogo()" style="margin-left:8px;background:var(--red-bg);color:var(--red);border:.5px solid var(--border);border-radius:6px;padding:8px 12px;font-size:13px;cursor:pointer">Rimuovi</button>
+          <div style="font-size:11px;color:var(--text2);margin-top:6px">PNG, JPG, SVG — larghezza massima consigliata 400px</div>
+        </div>
+      </div>
+    </div>
     <div class="fs">
       <div class="fs-t">I tuoi dati (appaiono nel PDF preventivo)</div>
       <div class="fr"><label class="fl">Nome / Ragione sociale</label><input type="text" id="sNome" placeholder="Es. Matteo Bianchi"></div>
@@ -555,8 +569,9 @@ let period='tutto';
 let machineRate=0;
 let designRate=0;
 let myInfo={nome:'',tel:'',email:'',piva:'',sito:'',indirizzo:'',footer:''};
-function loadSettings(){try{const s=localStorage.getItem(LS_SETTINGS);if(s){const d=JSON.parse(s);machineRate=Number(d.machineRate)||0;designRate=Number(d.designRate)||0;if(d.myInfo)myInfo=Object.assign({nome:'',tel:'',email:'',piva:'',sito:'',indirizzo:'',footer:''},d.myInfo);}}catch(e){}}
-function saveSettings(){localStorage.setItem(LS_SETTINGS,JSON.stringify({machineRate,designRate,myInfo}));}
+let logoData='';// base64 del logo
+function loadSettings(){try{const s=localStorage.getItem(LS_SETTINGS);if(s){const d=JSON.parse(s);machineRate=Number(d.machineRate)||0;designRate=Number(d.designRate)||0;logoData=d.logoData||'';if(d.myInfo)myInfo=Object.assign({nome:'',tel:'',email:'',piva:'',sito:'',indirizzo:'',footer:''},d.myInfo);}}catch(e){}}
+function saveSettings(){localStorage.setItem(LS_SETTINGS,JSON.stringify({machineRate,designRate,myInfo,logoData}));}
 
 // ── LISTINO MATERIALI BAMBU LAB (€/kg — store EU, giugno 2026) ──
 const MATERIALI = [
@@ -881,6 +896,16 @@ function openNew(){
   MATERIALI.forEach(m=>{const o=document.createElement('option');o.value=m.id;o.textContent=m.prezzo>0?m.nome+' — €'+m.prezzo.toFixed(2)+'/kg':m.nome;sel.appendChild(o);});
 })();
 
+function loadLogo(input){
+  const file=input.files[0];if(!file)return;
+  const r=new FileReader();
+  r.onload=e=>{logoData=e.target.result;const img=document.getElementById('logoPreview');img.src=logoData;img.style.display='block';};
+  r.readAsDataURL(file);
+}
+function removeLogo(){
+  logoData='';const img=document.getElementById('logoPreview');
+  img.src='';img.style.display='none';document.getElementById('sLogoFile').value='';
+}
 function openSettings(){
   document.getElementById('sMachineRate').value=machineRate||'';
   document.getElementById('sDesignRate').value=designRate||'';
@@ -891,6 +916,8 @@ function openSettings(){
   document.getElementById('sSito').value=myInfo.sito||'';
   document.getElementById('sIndirizzo').value=myInfo.indirizzo||'';
   document.getElementById('sFooter').value=myInfo.footer||'';
+  const img=document.getElementById('logoPreview');
+  if(logoData){img.src=logoData;img.style.display='block';}else{img.src='';img.style.display='none';}
   openPanel('pSettings');
 }
 function saveSettingsPanel(){
@@ -904,10 +931,8 @@ function saveSettingsPanel(){
   myInfo.indirizzo=document.getElementById('sIndirizzo').value.trim();
   myInfo.footer=document.getElementById('sFooter').value.trim();
   saveSettings();
-  persist();
-  saveToDrive();
-  closeAll();
-  showToast('✅ Impostazioni salvate su Drive');
+  persist();saveToDrive();
+  closeAll();showToast('✅ Impostazioni salvate');
 }
 function onMatChange(){
   const id=document.getElementById('fMat').value;
@@ -946,28 +971,47 @@ function calcCosti(){
   // Spese stampa = solo mat + macchina (NO progettazione)
   const spese=costoMat+costoMacchina;
   document.getElementById('fSpese').value=spese>0?spese.toFixed(2):'';
-  // Mostra ore progett nel campo display readonly
-  document.getElementById('fOreProgettDisplay').value=oreProgett>0?oreProgett+' h (€'+costoProgett.toFixed(2)+')':'';
+  // Ricalcola prezzi se qty è cambiata
+  const ppu=Number(document.getElementById('fPrezzoUnit').value)||0;
+  const tot=Number(document.getElementById('fTot').value)||0;
+  if(ppu>0) document.getElementById('fTot').value=(ppu*qty).toFixed(2);
+  else if(tot>0) document.getElementById('fPrezzoUnit').value=(tot/qty).toFixed(2);
   calcProf();
 }
 
-// Calcola totale vendita da prezzo unitario × quantità
-function calcTotaleVendita(){
-  const prezzoUnit=Number(document.getElementById('fPrezzoUnit').value)||0;
+// ── CALCOLO PREZZI BIDIREZIONALE ──
+function calcDaPrezzoUnit(){
+  // Prezzo unitario → calcola totale stampa
+  const ppu=Number(document.getElementById('fPrezzoUnit').value)||0;
   const qty=Number(document.getElementById('fQty').value)||1;
-  if(prezzoUnit>0){
-    document.getElementById('fTot').value=(prezzoUnit*qty).toFixed(2);
-    calcProf();
+  if(ppu>0){
+    document.getElementById('fTot').value=(ppu*qty).toFixed(2);
+  } else {
+    document.getElementById('fTot').value='';
   }
+  calcProf();
 }
 
-document.getElementById('fTot').addEventListener('input',calcProf);
+function calcDaTotale(){
+  // Totale → calcola prezzo unitario
+  const tot=Number(document.getElementById('fTot').value)||0;
+  const qty=Number(document.getElementById('fQty').value)||1;
+  if(tot>0){
+    document.getElementById('fPrezzoUnit').value=(tot/qty).toFixed(2);
+  } else {
+    document.getElementById('fPrezzoUnit').value='';
+  }
+  calcProf();
+}
+
 function calcProf(){
-  // Totale al cliente = stampa + progettazione
-  const tStampa=Number(document.getElementById('fTot').value)||0;
-  const tProgett=Number(document.getElementById('fCostoProgett').value)||0;
-  const totCliente=tStampa+tProgett;
-  // Spese interne = solo mat + macchina (NO progettazione)
+  // Totale stampa (ciò che l'utente ha impostato)
+  const totStampa=Number(document.getElementById('fTot').value)||0;
+  // Costo progettazione (va al cliente, ma NON è spesa interna)
+  const costoProgett=Number(document.getElementById('fCostoProgett').value)||0;
+  // Totale che paga il cliente = stampa + progettazione
+  const totCliente=totStampa+costoProgett;
+  // Spese interne = solo materiale + macchina (NO progettazione)
   const spese=Number(document.getElementById('fSpese').value)||0;
   // Profitto = totale cliente - spese stampa
   document.getElementById('fProf').value=(totCliente>0||spese>0)?(totCliente-spese).toFixed(2):'';
@@ -1262,17 +1306,27 @@ function generatePDF(id){
   doc.setDrawColor(...C.border);
   doc.setLineWidth(0.4);
 
-  // Nome fornitore grande (sinistra)
-  rgb(...C.accent,false);
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(22);
-  doc.text(myInfo.nome||'Sev4s3D',ml,16);
+  // Logo (se presente) oppure nome testuale
+  if(logoData){
+    try{
+      const ext=logoData.substring(logoData.indexOf('/')+1,logoData.indexOf(';')).toUpperCase();
+      const imgFmt=ext==='SVG+XML'?'PNG':ext; // jsPDF non supporta SVG nativo
+      doc.addImage(logoData,imgFmt==='PNG'||imgFmt==='JPEG'||imgFmt==='JPG'?imgFmt:'PNG',ml,6,50,14,'logo','FAST');
+    }catch(e){
+      // Fallback a testo se immagine non supportata
+      rgb(...C.accent,false);doc.setFont('helvetica','bold');doc.setFontSize(22);
+      doc.text(myInfo.nome||'Stampa3D',ml,16);
+    }
+  } else {
+    rgb(...C.accent,false);doc.setFont('helvetica','bold');doc.setFontSize(22);
+    doc.text(myInfo.nome||'Stampa3D',ml,16);
+  }
 
   // Dati fornitore (destra)
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(8);
+  doc.setFont('helvetica','normal');doc.setFontSize(8);
   rgb(...C.text2,false);
   const righeF=[];
+  if(myInfo.nome&&logoData) righeF.push(myInfo.nome);// nome sotto il logo se c'è logo
   if(myInfo.indirizzo) righeF.push(myInfo.indirizzo);
   if(myInfo.tel&&myInfo.email) righeF.push(`Tel: ${myInfo.tel}   Email: ${myInfo.email}`);
   else if(myInfo.tel) righeF.push(`Tel: ${myInfo.tel}`);
@@ -1417,7 +1471,7 @@ function generatePDF(id){
   doc.setDrawColor(...C.border);doc.line(W-mr-70,y,W-mr,y);
   y+=1;
   rgb(...C.text2,false);doc.setFont('helvetica','normal');doc.setFontSize(9);
-  doc.text('Totale ordine (IVA non inclusa)',W-mr-67,y+5);
+  doc.text('Totale ordine',W-mr-67,y+5);
   rgb(...C.accent,false);doc.setFont('helvetica','bold');doc.setFontSize(15);
   doc.text(`€ ${fm(totaleCliente)}`,W-mr,y+6,{align:'right'});
   y+=16;
