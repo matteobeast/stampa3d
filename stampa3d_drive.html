@@ -571,7 +571,22 @@ const LS_FILEID='stampa3d_driveFileId';
 const LS_SETTINGS='stampa3d_settings';
 const LS_TOKEN='stampa3d_token';
 
-let CLIENT_ID=localStorage.getItem(LS_CLIENT)||'';
+// ── COOKIE HELPERS ──
+// Usati come storage primario per il Client ID: più affidabili del localStorage
+// su alcune PWA installate (Edge/Windows), dove il localStorage di tanto in tanto
+// non viene letto correttamente al riavvio dell'app.
+function setCookie(name,value,days){
+  const d=new Date();d.setTime(d.getTime()+days*24*60*60*1000);
+  document.cookie=`${name}=${encodeURIComponent(value)};expires=${d.toUTCString()};path=/;SameSite=Lax`;
+}
+function getCookie(name){
+  const m=document.cookie.match(new RegExp('(^| )'+name+'=([^;]+)'));
+  return m?decodeURIComponent(m[2]):null;
+}
+function deleteCookie(name){
+  document.cookie=`${name}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;`;
+}
+let CLIENT_ID=getCookie(LS_CLIENT)||localStorage.getItem(LS_CLIENT)||'';
 let accessToken='';
 let tokenExpiry=0;
 let driveFileId=localStorage.getItem(LS_FILEID)||'';
@@ -617,7 +632,7 @@ window.addEventListener('load',()=>{
   // Rileggi sempre da localStorage qui dentro: su alcune PWA installate
   // lo script gira in un contesto che a volte non ha ancora sincronizzato
   // lo storage al momento dell'inizializzazione della variabile globale.
-  CLIENT_ID=localStorage.getItem(LS_CLIENT)||CLIENT_ID||'';
+  CLIENT_ID=getCookie(LS_CLIENT)||localStorage.getItem(LS_CLIENT)||CLIENT_ID||'';
   if(window.opener&&window.opener!==window){
     const h=window.location.hash;
     if(h&&h.includes('access_token')){window.opener.postMessage({type:'oauth_token',hash:h},window.location.origin);}
@@ -673,10 +688,10 @@ function checkClientId(){const v=document.getElementById('clientIdInput').value.
 function saveClientId(){
   const v=document.getElementById('clientIdInput').value.trim();
   if(v.length<20){alert('Incolla il Client ID completo — dovrebbe terminare con .apps.googleusercontent.com');return;}
-  CLIENT_ID=v;localStorage.setItem(LS_CLIENT,CLIENT_ID);
+  CLIENT_ID=v;setCookie(LS_CLIENT,CLIENT_ID,365);localStorage.setItem(LS_CLIENT,CLIENT_ID);
   document.getElementById('setupScreen').style.display='none';trySilentRefresh();
 }
-function resetClientId(){localStorage.removeItem(LS_CLIENT);localStorage.removeItem(LS_TOKEN);CLIENT_ID='';showSetup();}
+function resetClientId(){deleteCookie(LS_CLIENT);localStorage.removeItem(LS_CLIENT);localStorage.removeItem(LS_TOKEN);deleteCookie(LS_TOKEN);CLIENT_ID='';showSetup();}
 
 function startOAuthFlow(){
   const redirectUri=location.href.split('#')[0].split('?')[0];
