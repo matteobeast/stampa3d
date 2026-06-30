@@ -586,7 +586,11 @@ function getCookie(name){
 function deleteCookie(name){
   document.cookie=`${name}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;`;
 }
-let CLIENT_ID=getCookie(LS_CLIENT)||localStorage.getItem(LS_CLIENT)||'';
+// Client ID fisso — non dipende più da localStorage/cookie, elimina ogni problema
+// di persistenza su PWA installate. Il Client ID OAuth è pubblico per design
+// nei flussi client-side (è il pattern standard di Google per le SPA).
+const HARDCODED_CLIENT_ID='3115705203-ah96ek6257c07jt8jt4oiub53knvsd6c.apps.googleusercontent.com';
+let CLIENT_ID=HARDCODED_CLIENT_ID;
 let accessToken='';
 let tokenExpiry=0;
 let driveFileId=localStorage.getItem(LS_FILEID)||'';
@@ -632,7 +636,7 @@ window.addEventListener('load',()=>{
   // Rileggi sempre da localStorage qui dentro: su alcune PWA installate
   // lo script gira in un contesto che a volte non ha ancora sincronizzato
   // lo storage al momento dell'inizializzazione della variabile globale.
-  CLIENT_ID=getCookie(LS_CLIENT)||localStorage.getItem(LS_CLIENT)||CLIENT_ID||'';
+  // CLIENT_ID è ora hardcoded — sempre presente, nessuna dipendenza da storage
   if(window.opener&&window.opener!==window){
     const h=window.location.hash;
     if(h&&h.includes('access_token')){window.opener.postMessage({type:'oauth_token',hash:h},window.location.origin);}
