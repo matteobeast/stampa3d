@@ -10,6 +10,7 @@
 <meta name="theme-color" content="#7f5af0">
 
 <!-- iOS: rende l'app a schermo intero quando aggiunta alla home -->
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Sev4s3D">
@@ -593,7 +594,7 @@ const HARDCODED_CLIENT_ID='3115705203-ah96ek6257c07jt8jt4oiub53knvsd6c.apps.goog
 let CLIENT_ID=HARDCODED_CLIENT_ID;
 let accessToken='';
 let tokenExpiry=0;
-let driveFileId=localStorage.getItem(LS_FILEID)||'';
+let driveFileId='';try{driveFileId=localStorage.getItem(LS_FILEID)||'';}catch(e){}
 let orders=[];
 let nextId=1;
 let filt='tutti';
@@ -632,11 +633,8 @@ const MATERIALI = [
 
 // ── INIT ──
 window.addEventListener('load',()=>{
-  loadSettings();
-  // Rileggi sempre da localStorage qui dentro: su alcune PWA installate
-  // lo script gira in un contesto che a volte non ha ancora sincronizzato
-  // lo storage al momento dell'inizializzazione della variabile globale.
-  // CLIENT_ID è ora hardcoded — sempre presente, nessuna dipendenza da storage
+  try{ loadSettings(); }catch(e){}
+  // CLIENT_ID è hardcoded — sempre presente, nessuna dipendenza da storage
   if(window.opener&&window.opener!==window){
     const h=window.location.hash;
     if(h&&h.includes('access_token')){window.opener.postMessage({type:'oauth_token',hash:h},window.location.origin);}
@@ -1543,15 +1541,16 @@ function generatePDF(id){
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTm);toastTm=setTimeout(()=>t.classList.remove('show'),3400);}
 
 // Pulizia automatica: rimuove qualsiasi service worker residuo da versioni precedenti
-// (causa nota di cache fantasma che impediva il login persistente)
-if('serviceWorker' in navigator){
-  navigator.serviceWorker.getRegistrations().then(regs=>{
-    regs.forEach(r=>r.unregister());
-  });
-  if('caches' in window){
-    caches.keys().then(names=>names.forEach(n=>caches.delete(n)));
+try{
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.getRegistrations().then(regs=>{
+      regs.forEach(r=>r.unregister());
+    }).catch(()=>{});
   }
-}
+  if('caches' in window){
+    caches.keys().then(names=>names.forEach(n=>caches.delete(n))).catch(()=>{});
+  }
+}catch(e){}
 </script>
 </body>
 </html>
