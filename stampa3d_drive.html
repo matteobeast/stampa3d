@@ -1519,12 +1519,12 @@ function generatePDF(id){
 }
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTm);toastTm=setTimeout(()=>t.classList.remove('show'),3400);}
 
-// ── PWA: registra service worker (rende l'app installabile) ──
-if('serviceWorker' in navigator){
-  window.addEventListener('load',()=>{
-    navigator.serviceWorker.register('sw.js').catch(()=>{});
-  });
-}
+// PWA: service worker temporaneamente disattivato (debug reset login)
+// if('serviceWorker' in navigator){
+//   window.addEventListener('load',()=>{
+//     navigator.serviceWorker.register('sw.js').catch(()=>{});
+//   });
+// }
 </script>
 </body>
 </html>
