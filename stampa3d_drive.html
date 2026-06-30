@@ -1523,11 +1523,15 @@ function generatePDF(id){
 }
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTm);toastTm=setTimeout(()=>t.classList.remove('show'),3400);}
 
-// ── PWA: registra service worker (rende l'app installabile) ──
+// Pulizia automatica: rimuove qualsiasi service worker residuo da versioni precedenti
+// (causa nota di cache fantasma che impediva il login persistente)
 if('serviceWorker' in navigator){
-  window.addEventListener('load',()=>{
-    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  navigator.serviceWorker.getRegistrations().then(regs=>{
+    regs.forEach(r=>r.unregister());
   });
+  if('caches' in window){
+    caches.keys().then(names=>names.forEach(n=>caches.delete(n)));
+  }
 }
 </script>
 </body>
