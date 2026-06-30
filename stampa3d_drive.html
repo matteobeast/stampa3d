@@ -614,6 +614,10 @@ const MATERIALI = [
 // ── INIT ──
 window.addEventListener('load',()=>{
   loadSettings();
+  // Rileggi sempre da localStorage qui dentro: su alcune PWA installate
+  // lo script gira in un contesto che a volte non ha ancora sincronizzato
+  // lo storage al momento dell'inizializzazione della variabile globale.
+  CLIENT_ID=localStorage.getItem(LS_CLIENT)||CLIENT_ID||'';
   if(window.opener&&window.opener!==window){
     const h=window.location.hash;
     if(h&&h.includes('access_token')){window.opener.postMessage({type:'oauth_token',hash:h},window.location.origin);}
@@ -1519,12 +1523,12 @@ function generatePDF(id){
 }
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTm);toastTm=setTimeout(()=>t.classList.remove('show'),3400);}
 
-// PWA: service worker temporaneamente disattivato (debug reset login)
-// if('serviceWorker' in navigator){
-//   window.addEventListener('load',()=>{
-//     navigator.serviceWorker.register('sw.js').catch(()=>{});
-//   });
-// }
+// ── PWA: registra service worker (rende l'app installabile) ──
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
 </script>
 </body>
 </html>
