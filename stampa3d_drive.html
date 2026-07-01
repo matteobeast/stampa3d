@@ -2,8 +2,15 @@
 <html lang="it">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <title>Stampa 3D</title>
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#7f5af0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Stampa3D">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -272,6 +279,9 @@ select option{background:var(--s2)}
     Accedi con Google
   </button>
   <div class="sync-note">I dati vengono salvati su Google Drive come <code>dati_stampa3d.json</code>. Solo tu puoi vederli.</div>
+  <div id="pwaHint" style="display:none;margin-top:16px;font-size:11px;color:var(--accent-t);background:var(--accent-bg);border-radius:8px;padding:10px 14px;max-width:280px;line-height:1.6;text-align:left">
+    📲 <strong>Installa l'app:</strong> tocca <strong>Condividi</strong> → <strong>Aggiungi a schermata Home</strong>
+  </div>
   <button class="btn-ghost" onclick="resetClientId()">↩ Cambia Client ID</button>
 </div>
 
@@ -597,19 +607,54 @@ const MATERIALI = [
   {id:'altro',        nome:'Altro (prezzo manuale)', prezzo:0},
 ];
 
+// ── DEVICE DETECTION ──
+function isIOS(){return /ipad|iphone|ipod/i.test(navigator.userAgent)||(/macintosh/i.test(navigator.userAgent)&&navigator.maxTouchPoints>1);}
+function isPWA(){return window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;}
+function useRedirectOAuth(){return isIOS()||isPWA();}
+
 // ── INIT ──
 window.addEventListener('load',()=>{
   loadSettings();
+
+  // ── Registra Service Worker per PWA ──
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
+
+  // ── Caso 1: siamo il popup di ritorno (solo desktop) ──
   if(window.opener&&window.opener!==window){
     const h=window.location.hash;
     if(h&&h.includes('access_token')){window.opener.postMessage({type:'oauth_token',hash:h},window.location.origin);}
     window.close();return;
   }
+
+  // ── Caso 2: ritorno dal redirect OAuth (iOS / PWA) ──
+  const urlHash=window.location.hash;
+  if(urlHash.includes('access_token')){
+    history.replaceState(null,'',location.pathname+location.search);
+    const p=new URLSearchParams(urlHash.slice(1));
+    const token=p.get('access_token');
+    const expires=parseInt(p.get('expires_in')||'3600');
+    if(token){
+      accessToken=token;
+      tokenExpiry=Date.now()+expires*1000;
+      sessionStorage.removeItem('oauth_redirect_pending');
+      showSplash();
+      fetchUserInfo(true).then(()=>loadFromDrive()).catch(()=>loadFromDrive());
+      showApp();
+      scheduleTokenRefresh(tokenExpiry);
+      return;
+    }
+  }
+
+  // ── Caso 3: CLIENT_ID non configurato ancora ──
   if(!CLIENT_ID){showSetup();return;}
+
+  // ── Caso 4: token salvato ancora valido ──
   try{
     const s=localStorage.getItem(LS_TOKEN);
     if(s){const{token,expiry,userName,userPic}=JSON.parse(s);
-      if(expiry>Date.now()+60000){
+      if(token&&expiry>Date.now()+60000){
         accessToken=token;tokenExpiry=expiry;
         if(userName)document.getElementById('userName').textContent=userName;
         if(userPic)document.getElementById('userAvatar').src=userPic;
@@ -617,6 +662,11 @@ window.addEventListener('load',()=>{
       }
     }
   }catch(e){}
+
+  // ── Caso 5: su iOS/PWA non usiamo iframe (bloccato da Safari) ──
+  if(useRedirectOAuth()){
+    hideSplash();showLogin();return;
+  }
   trySilentRefresh();
 });
 
@@ -628,10 +678,10 @@ function trySilentRefresh(){
   iframe.style.cssText='position:fixed;width:1px;height:1px;opacity:0;pointer-events:none';
   iframe.src='https://accounts.google.com/o/oauth2/v2/auth?'+params.toString();
   document.body.appendChild(iframe);
-  const timeout=setTimeout(()=>{window.removeEventListener('message',onSilent);document.body.removeChild(iframe);hideSplash();showLogin();},4000);
+  const timeout=setTimeout(()=>{window.removeEventListener('message',onSilent);if(document.body.contains(iframe))document.body.removeChild(iframe);hideSplash();showLogin();},4000);
   function onSilent(e){
     if(e.origin!==location.origin||!e.data||e.data.type!=='oauth_token')return;
-    clearTimeout(timeout);window.removeEventListener('message',onSilent);document.body.removeChild(iframe);
+    clearTimeout(timeout);window.removeEventListener('message',onSilent);if(document.body.contains(iframe))document.body.removeChild(iframe);
     const p=new URLSearchParams(e.data.hash.slice(1));const token=p.get('access_token');
     if(token){accessToken=token;tokenExpiry=Date.now()+parseInt(p.get('expires_in')||'3600')*1000;hideSplash();showApp();fetchUserInfo(true).then(()=>loadFromDrive());scheduleTokenRefresh(tokenExpiry);}
     else{hideSplash();showLogin();}
@@ -639,7 +689,13 @@ function trySilentRefresh(){
   window.addEventListener('message',onSilent);
 }
 
-function scheduleTokenRefresh(expiry){const d=expiry-Date.now()-5*60*1000;if(d>0)setTimeout(trySilentRefresh,d);}
+function scheduleTokenRefresh(expiry){
+  const d=expiry-Date.now()-5*60*1000;
+  if(d>0)setTimeout(()=>{
+    if(useRedirectOAuth()){/* su iOS non facciamo silent refresh automatico */}
+    else{trySilentRefresh();}
+  },d);
+}
 
 function showSplash(){
   let s=document.getElementById('splashScreen');
@@ -649,8 +705,8 @@ function showSplash(){
 function hideSplash(){const s=document.getElementById('splashScreen');if(s)s.style.display='none';}
 
 function showSetup(){document.getElementById('setupScreen').style.display='flex';document.getElementById('loginScreen').style.display='none';document.getElementById('app').style.display='none';}
-function showLogin(){document.getElementById('setupScreen').style.display='none';document.getElementById('loginScreen').style.display='flex';document.getElementById('app').style.display='none';}
-function showApp(){document.getElementById('loginScreen').style.display='none';document.getElementById('app').style.display='block';}
+function showLogin(){document.getElementById('setupScreen').style.display='none';document.getElementById('loginScreen').style.display='flex';document.getElementById('app').style.display='none';const ph=document.getElementById('pwaHint');if(ph)ph.style.display=(isIOS()&&!isPWA())?'block':'none';}
+function showApp(){document.getElementById('setupScreen').style.display='none';document.getElementById('loginScreen').style.display='none';document.getElementById('app').style.display='block';}
 function checkClientId(){const v=document.getElementById('clientIdInput').value.trim();document.getElementById('btnSetup').style.opacity=v.length>=20?'1':'0.4';}
 function saveClientId(){
   const v=document.getElementById('clientIdInput').value.trim();
@@ -663,9 +719,17 @@ function resetClientId(){localStorage.removeItem(LS_CLIENT);localStorage.removeI
 function startOAuthFlow(){
   const redirectUri=location.href.split('#')[0].split('?')[0];
   const params=new URLSearchParams({client_id:CLIENT_ID,redirect_uri:redirectUri,response_type:'token',scope:SCOPE+' https://www.googleapis.com/auth/userinfo.profile',prompt:'select_account'});
-  const w=500,h=600,left=Math.round((screen.width-w)/2),top=Math.round((screen.height-h)/2);
-  window.open('https://accounts.google.com/o/oauth2/v2/auth?'+params.toString(),'googleauth',`width=${w},height=${h},left=${left},top=${top},menubar=no,toolbar=no`);
-  window.addEventListener('message',handleOAuthMessage,{once:true});
+  const authUrl='https://accounts.google.com/o/oauth2/v2/auth?'+params.toString();
+  if(useRedirectOAuth()){
+    // iOS o PWA: redirect della stessa finestra (l'unico modo che funziona su Safari/iOS)
+    sessionStorage.setItem('oauth_redirect_pending','1');
+    location.href=authUrl;
+  } else {
+    // Desktop: popup
+    const w=500,h=600,left=Math.round((screen.width-w)/2),top=Math.round((screen.height-h)/2);
+    window.open(authUrl,'googleauth',`width=${w},height=${h},left=${left},top=${top},menubar=no,toolbar=no`);
+    window.addEventListener('message',handleOAuthMessage,{once:true});
+  }
 }
 function handleOAuthMessage(e){
   if(e.origin!==location.origin||!e.data||e.data.type!=='oauth_token')return;
