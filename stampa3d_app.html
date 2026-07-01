@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <title>Stampa 3D</title>
-<link rel="manifest" href="manifest.json">
+<link rel="manifest" href="manifest-app.json">
 <meta name="theme-color" content="#7f5af0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -385,7 +385,7 @@ select option{background:var(--s2)}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:84px;right:12px;z-index:50;background:var(--s2);border:.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:11px;color:var(--text2);">📱 Versione iOS/Safari · <a href="stampa3d_app.html" style="color:var(--accent-t)">🖥 Versione App Desktop</a></div>
+<div style="position:fixed;bottom:84px;right:12px;z-index:50;background:var(--s2);border:.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:11px;color:var(--text2);">🖥 Versione App Desktop · <a href="stampa3d_web.html" style="color:var(--accent-t)">📱 Versione iOS/Safari</a></div>
 <div class="ov" id="ov" onclick="closeAll()"></div>
 
 <!-- FORM PANEL -->
@@ -614,30 +614,15 @@ function isPWA(){
     navigator.standalone===true;
 }
 
-// ── INIT — versione WEB (Safari/browser, nessuna PWA) ──
+// ── INIT — versione APP (Windows/Edge/Android PWA) ──
 window.addEventListener('load',()=>{
   try{loadSettings();}catch(e){}
 
-  // Popup desktop che torna da Google
+  // Popup che torna da Google con il token
   if(window.opener&&window.opener!==window){
     const h=window.location.hash;
     if(h&&h.includes('access_token'))window.opener.postMessage({type:'oauth_token',hash:h},window.location.origin);
     window.close();return;
-  }
-
-  // Redirect (iOS Safari) che torna da Google con il token nell'URL
-  const urlHash=window.location.hash;
-  if(urlHash.includes('access_token')){
-    history.replaceState(null,'',location.pathname+location.search);
-    const p=new URLSearchParams(urlHash.slice(1));
-    const token=p.get('access_token');
-    const expires=parseInt(p.get('expires_in')||'3600');
-    if(token){
-      accessToken=token;tokenExpiry=Date.now()+expires*1000;
-      fetchUserInfo(true).then(()=>loadFromDrive()).catch(()=>loadFromDrive());
-      showApp();scheduleTokenRefresh(tokenExpiry);
-    } else showLogin();
-    return;
   }
 
   if(!CLIENT_ID){showSetup();return;}
@@ -652,10 +637,7 @@ window.addEventListener('load',()=>{
     showApp();loadFromDrive();scheduleTokenRefresh(expiry);return;
   }
 
-  // Su iOS → mostra login diretto (redirect, non iframe)
-  if(isIOS()){hideSplash();showLogin();return;}
-
-  // Desktop → silent refresh con iframe
+  // Silent refresh con iframe (funziona su Edge/Chrome/Android)
   trySilentRefresh();
 });
 
@@ -682,10 +664,7 @@ function trySilentRefresh(){
 function scheduleTokenRefresh(expiry){
   const d=expiry-Date.now()-5*60*1000;
   if(d<=0)return;
-  setTimeout(()=>{
-    if(isIOS()){showLogin();return;} // iOS: chiede login esplicito
-    trySilentRefresh();
-  },d);
+  setTimeout(()=>trySilentRefresh(),d);
 }
 
 // ── SPLASH ──
@@ -720,15 +699,10 @@ function startOAuthFlow(){
   const redirectUri=location.href.split('#')[0].split('?')[0];
   const params=new URLSearchParams({client_id:CLIENT_ID,redirect_uri:redirectUri,response_type:'token',scope:SCOPE+' https://www.googleapis.com/auth/userinfo.profile',prompt:'select_account'});
   const authUrl='https://accounts.google.com/o/oauth2/v2/auth?'+params.toString();
-  if(isIOS()){
-    // iOS Safari: redirect della stessa pagina, ritorna con token nell'hash
-    location.href=authUrl;
-  } else {
-    // Desktop/Android: popup classico con postMessage
-    const w=500,h=600,left=Math.round((screen.width-w)/2),top=Math.round((screen.height-h)/2);
-    window.open(authUrl,'googleauth',`width=${w},height=${h},left=${left},top=${top},menubar=no,toolbar=no`);
-    window.addEventListener('message',handleOAuthMessage,{once:true});
-  }
+  // Popup classico con postMessage — funziona su Edge/Chrome/Android
+  const w=500,h=600,left=Math.round((screen.width-w)/2),top=Math.round((screen.height-h)/2);
+  window.open(authUrl,'googleauth',`width=${w},height=${h},left=${left},top=${top},menubar=no,toolbar=no`);
+  window.addEventListener('message',handleOAuthMessage,{once:true});
 }
 function handleOAuthMessage(e){
   if(e.origin!==location.origin||!e.data||e.data.type!=='oauth_token')return;
