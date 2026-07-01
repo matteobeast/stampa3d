@@ -640,7 +640,7 @@ window.addEventListener('load',()=>{
     if(token){
       accessToken=token;
       tokenExpiry=Date.now()+expires*1000;
-      // Salva in localStorage — la PWA in attesa lo leggerà col polling
+      // Salva il token (cookie + localStorage) — la PWA in attesa lo leggerà col polling cookie
       fetchUserInfo(true).then(()=>{
         localStorage.removeItem(LS_OAUTH_WAIT);
         showReturnToApp();
@@ -669,23 +669,20 @@ window.addEventListener('load',()=>{
   // ── CASO D: CLIENT_ID non ancora configurato ──
   if(!CLIENT_ID){showSetup();return;}
 
-  // ── CASO E: token salvato ancora valido ──
-  try{
-    const s=localStorage.getItem(LS_TOKEN);
-    if(s){const{token,expiry,userName,userPic}=JSON.parse(s);
-      if(token&&expiry>Date.now()+60000){
-        accessToken=token;tokenExpiry=expiry;
-        if(userName)document.getElementById('userName').textContent=userName;
-        if(userPic)document.getElementById('userAvatar').src=userPic;
-        showApp();loadFromDrive();scheduleTokenRefresh(expiry);return;
-      }
-    }
-  }catch(e){}
+  // ── Token salvato (cookie o localStorage) ancora valido ──
+  const savedTok=loadToken();
+  if(savedTok){
+    const{token,expiry,userName,userPic}=savedTok;
+    accessToken=token;tokenExpiry=expiry;
+    if(userName)document.getElementById('userName').textContent=userName;
+    if(userPic)document.getElementById('userAvatar').src=userPic;
+    showApp();loadFromDrive();scheduleTokenRefresh(expiry);return;
+  }
 
-  // ── CASO F: iOS/PWA → mostra login (no iframe silenzioso, Safari blocca i cookie 3rd party) ──
-  if(isIOS()||isPWA()){hideSplash();showLogin();return;}
+  // Su iOS standalone il silent refresh via iframe non funziona → mostra login diretto
+  if(isIOS()&&isPWA()){hideSplash();showLogin();return;}
 
-  // ── CASO G: desktop → silent refresh con iframe ──
+  // Desktop/Android → silent refresh con iframe
   trySilentRefresh();
 });
 
@@ -707,7 +704,7 @@ function trySilentRefresh(){
     if(e.origin!==location.origin||!e.data||e.data.type!=='oauth_token')return;
     clearTimeout(timeout);cleanup();
     const p=new URLSearchParams(e.data.hash.slice(1));const token=p.get('access_token');
-    if(token){accessToken=token;tokenExpiry=Date.now()+parseInt(p.get('expires_in')||'3600')*1000;hideSplash();showApp();fetchUserInfo(true).then(()=>loadFromDrive());scheduleTokenRefresh(tokenExpiry);}
+    if(token){accessToken=token;tokenExpiry=Date.now()+parseInt(p.get('expires_in')||'3600')*1000;hideSplash();showApp();fetchUserInfo(true).then(()=>loadFromDrive());scheduleTokenRefresh(tokenExpiry);}else{hideSplash();showLogin();}
     else{hideSplash();showLogin();}
   }
   window.addEventListener('message',onSilent);
@@ -748,53 +745,43 @@ function saveClientId(){
   CLIENT_ID=v;localStorage.setItem(LS_CLIENT,CLIENT_ID);
   document.getElementById('setupScreen').style.display='none';trySilentRefresh();
 }
-function resetClientId(){localStorage.removeItem(LS_CLIENT);localStorage.removeItem(LS_TOKEN);CLIENT_ID='';showSetup();}
+function resetClientId(){clearToken();try{localStorage.removeItem(LS_CLIENT);}catch(e){}CLIENT_ID='';showSetup();}
 
 // ── POLLING token per PWA iOS (legge localStorage scritto dalla tab Safari) ──
 let _oauthPoll=null;
 function startTokenPolling(){
+  // Polling cookie: quando l'utente torna dalla scheda Safari con il token
+  // il cookie è già disponibile (condiviso tra Safari e PWA su iOS)
   if(_oauthPoll)clearInterval(_oauthPoll);
   showSplash('Completa il login in Safari…<br><span style="font-size:12px;margin-top:4px;display:block">poi torna qui premendo Home → Stampa3D</span>');
   _oauthPoll=setInterval(()=>{
-    try{
-      const s=localStorage.getItem(LS_TOKEN);
-      if(!s)return;
-      const{token,expiry,userName,userPic}=JSON.parse(s);
-      if(token&&expiry>Date.now()+60000){
-        clearInterval(_oauthPoll);_oauthPoll=null;
-        document.removeEventListener('visibilitychange',_onVisOAuth);
-        accessToken=token;tokenExpiry=expiry;
-        if(userName)document.getElementById('userName').textContent=userName;
-        if(userPic)document.getElementById('userAvatar').src=userPic;
-        showApp();loadFromDrive();scheduleTokenRefresh(tokenExpiry);
-      }
-    }catch(e){}
-  },900);
-  // Controlla subito quando l'utente torna alla PWA (focus/visibility)
+    const saved=loadToken();
+    if(!saved)return;
+    clearInterval(_oauthPoll);_oauthPoll=null;
+    document.removeEventListener('visibilitychange',_onVisOAuth);
+    accessToken=saved.token;tokenExpiry=saved.expiry;
+    if(saved.userName)document.getElementById('userName').textContent=saved.userName;
+    if(saved.userPic)document.getElementById('userAvatar').src=saved.userPic;
+    hideSplash();showApp();loadFromDrive();scheduleTokenRefresh(saved.expiry);
+  },600);
   document.addEventListener('visibilitychange',_onVisOAuth);
-  // Timeout 10 min
   setTimeout(()=>{
     if(!_oauthPoll)return;
     clearInterval(_oauthPoll);_oauthPoll=null;
     document.removeEventListener('visibilitychange',_onVisOAuth);
-    localStorage.removeItem(LS_OAUTH_WAIT);
-    showLogin();
+    hideSplash();showLogin();
   },10*60*1000);
 }
 function _onVisOAuth(){
   if(document.visibilityState!=='visible')return;
-  try{
-    const s=localStorage.getItem(LS_TOKEN);if(!s)return;
-    const{token,expiry,userName,userPic}=JSON.parse(s);
-    if(token&&expiry>Date.now()+60000){
-      if(_oauthPoll){clearInterval(_oauthPoll);_oauthPoll=null;}
-      document.removeEventListener('visibilitychange',_onVisOAuth);
-      accessToken=token;tokenExpiry=expiry;
-      if(userName)document.getElementById('userName').textContent=userName;
-      if(userPic)document.getElementById('userAvatar').src=userPic;
-      showApp();loadFromDrive();scheduleTokenRefresh(tokenExpiry);
-    }
-  }catch(e){}
+  const saved=loadToken();
+  if(!saved)return;
+  if(_oauthPoll){clearInterval(_oauthPoll);_oauthPoll=null;}
+  document.removeEventListener('visibilitychange',_onVisOAuth);
+  accessToken=saved.token;tokenExpiry=saved.expiry;
+  if(saved.userName)document.getElementById('userName').textContent=saved.userName;
+  if(saved.userPic)document.getElementById('userAvatar').src=saved.userPic;
+  hideSplash();showApp();loadFromDrive();scheduleTokenRefresh(saved.expiry);
 }
 
 function startOAuthFlow(){
@@ -822,18 +809,55 @@ function startOAuthFlow(){
 function handleOAuthMessage(e){
   if(e.origin!==location.origin||!e.data||e.data.type!=='oauth_token')return;
   const p=new URLSearchParams(e.data.hash.slice(1));const token=p.get('access_token');
-  if(token){accessToken=token;tokenExpiry=Date.now()+parseInt(p.get('expires_in')||'3600')*1000;showApp();fetchUserInfo(true).then(()=>loadFromDrive());scheduleTokenRefresh(tokenExpiry);}
-  else showToast('❌ Login fallito — riprova');
+  if(token){
+    accessToken=token;
+    tokenExpiry=Date.now()+parseInt(p.get('expires_in')||'3600')*1000;
+    showApp();
+    fetchUserInfo(true).then(()=>loadFromDrive());
+    scheduleTokenRefresh(tokenExpiry);
+  } else showToast('❌ Login fallito — riprova');
 }
 async function fetchUserInfo(save=false){
   try{
     const u=await(await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+accessToken}})).json();
     const n=(u.name||u.email||'').split(' ')[0];const pic=u.picture||'';
     document.getElementById('userName').textContent=n;document.getElementById('userAvatar').src=pic;
-    if(save)localStorage.setItem(LS_TOKEN,JSON.stringify({token:accessToken,expiry:tokenExpiry,userName:n,userPic:pic}));
+    if(save) saveToken(accessToken,tokenExpiry,n,pic);
   }catch(e){}
 }
-function signOut(){if(!confirm('Disconnettersi?'))return;localStorage.removeItem(LS_TOKEN);accessToken='';orders=[];driveFileId='';showLogin();}
+
+// ── TOKEN STORAGE — Cookie (primario, condiviso Safari↔PWA iOS) + localStorage (backup) ──
+function saveToken(token,expiry,userName,userPic){
+  const data=JSON.stringify({token,expiry,userName,userPic});
+  // Cookie: 8 ore di durata, SameSite=None; Secure per iOS standalone
+  const maxAge=8*3600;
+  try{ document.cookie=`st_tok=${encodeURIComponent(data)};max-age=${maxAge};path=/;SameSite=Lax`; }catch(e){}
+  try{ localStorage.setItem(LS_TOKEN,data); }catch(e){}
+}
+
+function loadToken(){
+  // Prima prova il cookie (condiviso tra Safari e PWA su iOS)
+  try{
+    const m=document.cookie.match(/(^|;)\s*st_tok=([^;]+)/);
+    if(m){
+      const d=JSON.parse(decodeURIComponent(m[2]));
+      if(d&&d.token&&d.expiry>Date.now()+60000) return d;
+    }
+  }catch(e){}
+  // Fallback: localStorage (funziona su desktop e Android)
+  try{
+    const s=localStorage.getItem(LS_TOKEN);
+    if(s){const d=JSON.parse(s);if(d&&d.token&&d.expiry>Date.now()+60000) return d;}
+  }catch(e){}
+  return null;
+}
+
+function clearToken(){
+  try{ document.cookie='st_tok=;max-age=0;path=/;SameSite=Lax'; }catch(e){}
+  try{ localStorage.removeItem(LS_TOKEN); }catch(e){}
+}
+
+function signOut(){if(!confirm('Disconnettersi?'))return;clearToken();accessToken='';orders=[];driveFileId='';showLogin();}
 
 // ── NAVIGATION ──
 function showPage(p){
