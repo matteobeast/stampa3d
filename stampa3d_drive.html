@@ -705,7 +705,6 @@ function trySilentRefresh(){
     clearTimeout(timeout);cleanup();
     const p=new URLSearchParams(e.data.hash.slice(1));const token=p.get('access_token');
     if(token){accessToken=token;tokenExpiry=Date.now()+parseInt(p.get('expires_in')||'3600')*1000;hideSplash();showApp();fetchUserInfo(true).then(()=>loadFromDrive());scheduleTokenRefresh(tokenExpiry);}else{hideSplash();showLogin();}
-    else{hideSplash();showLogin();}
   }
   window.addEventListener('message',onSilent);
 }
