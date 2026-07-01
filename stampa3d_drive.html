@@ -2,23 +2,8 @@
 <html lang="it">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
-<title>Sev4s3D</title>
-
-<!-- PWA: installabile su desktop, iOS, Android -->
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#7f5af0">
-
-<!-- iOS: rende l'app a schermo intero quando aggiunta alla home -->
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Sev4s3D">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
-
-<!-- Icone -->
-<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
-<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Stampa 3D</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -483,10 +468,10 @@ select option{background:var(--s2)}
       </div>
       <div class="fr3">
         <div><label class="fl">Spese stampa (€) <span style="font-size:10px;color:var(--text3)">mat.+macch.</span></label><input type="number" id="fSpese" placeholder="auto" step="0.01" readonly style="background:var(--s3);color:var(--amber)"></div>
-        <div><label class="fl">Costo progett. (€) <span style="font-size:10px;color:var(--text3)">nel pdf, no spesa</span></label><input type="number" id="fCostoProgett" placeholder="—" step="0.01" readonly style="background:var(--s3);color:var(--accent-t)"></div>
+        <div><label class="fl">Ore progett. (tracciato)</label><input type="number" id="fOreProgettDisplay" placeholder="—" step="0.01" readonly style="background:var(--s3);color:var(--accent-t)"></div>
         <div><label class="fl">Profitto netto (€)</label><input type="number" id="fProf" placeholder="auto" step="0.01" readonly style="background:var(--s3);color:var(--green)"></div>
       </div>
-      <div style="font-size:11px;color:var(--text3);margin-top:-4px;margin-bottom:10px">💡 Il costo progettazione appare nel PDF al cliente ma non viene sottratto al tuo profitto.</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:-4px;margin-bottom:10px">⚠️ Le ore di progettazione non vengono sottratte al profitto — sono solo tracciate nel preventivo.</div>
     </div>
     <div class="fs">
       <div class="fs-t">Note</div>
@@ -572,29 +557,10 @@ const LS_FILEID='stampa3d_driveFileId';
 const LS_SETTINGS='stampa3d_settings';
 const LS_TOKEN='stampa3d_token';
 
-// ── COOKIE HELPERS ──
-// Usati come storage primario per il Client ID: più affidabili del localStorage
-// su alcune PWA installate (Edge/Windows), dove il localStorage di tanto in tanto
-// non viene letto correttamente al riavvio dell'app.
-function setCookie(name,value,days){
-  const d=new Date();d.setTime(d.getTime()+days*24*60*60*1000);
-  document.cookie=`${name}=${encodeURIComponent(value)};expires=${d.toUTCString()};path=/;SameSite=Lax`;
-}
-function getCookie(name){
-  const m=document.cookie.match(new RegExp('(^| )'+name+'=([^;]+)'));
-  return m?decodeURIComponent(m[2]):null;
-}
-function deleteCookie(name){
-  document.cookie=`${name}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;`;
-}
-// Client ID fisso — non dipende più da localStorage/cookie, elimina ogni problema
-// di persistenza su PWA installate. Il Client ID OAuth è pubblico per design
-// nei flussi client-side (è il pattern standard di Google per le SPA).
-const HARDCODED_CLIENT_ID='3115705203-ah96ek6257c07jt8jt4oiub53knvsd6c.apps.googleusercontent.com';
-let CLIENT_ID=HARDCODED_CLIENT_ID;
+let CLIENT_ID=localStorage.getItem(LS_CLIENT)||'';
 let accessToken='';
 let tokenExpiry=0;
-let driveFileId='';try{driveFileId=localStorage.getItem(LS_FILEID)||'';}catch(e){}
+let driveFileId=localStorage.getItem(LS_FILEID)||'';
 let orders=[];
 let nextId=1;
 let filt='tutti';
@@ -632,37 +598,13 @@ const MATERIALI = [
 ];
 
 // ── INIT ──
-// ── iOS / PWA DETECTION ──
-function isIOS(){return /iphone|ipad|ipod/i.test(navigator.userAgent);}
-function isPWA(){return window.navigator.standalone===true||window.matchMedia('(display-mode:standalone)').matches;}
-
 window.addEventListener('load',()=>{
-  try{ loadSettings(); }catch(e){}
-
-  // POPUP CHILD: token nell'hash, lo manda al parent e chiude
+  loadSettings();
   if(window.opener&&window.opener!==window){
     const h=window.location.hash;
     if(h&&h.includes('access_token')){window.opener.postMessage({type:'oauth_token',hash:h},window.location.origin);}
     window.close();return;
   }
-
-  // REDIRECT RETURN (iOS): token nell'hash dopo redirect OAuth
-  const hash=window.location.hash;
-  if(hash&&hash.includes('access_token')){
-    const p=new URLSearchParams(hash.slice(1));
-    const token=p.get('access_token');
-    if(token){
-      history.replaceState(null,'',location.pathname+location.search);
-      accessToken=token;
-      tokenExpiry=Date.now()+parseInt(p.get('expires_in')||'3600')*1000;
-      hideSplash();showApp();
-      fetchUserInfo(true).then(()=>loadFromDrive());
-      scheduleTokenRefresh(tokenExpiry);
-      return;
-    }
-  }
-
-  // Flusso normale — identico all'originale
   if(!CLIENT_ID){showSetup();return;}
   try{
     const s=localStorage.getItem(LS_TOKEN);
@@ -675,9 +617,6 @@ window.addEventListener('load',()=>{
       }
     }
   }catch(e){}
-
-  // Su iOS/PWA l'iframe silenzioso è bloccato → vai diretto al login
-  if(isIOS()||isPWA()){hideSplash();showLogin();return;}
   trySilentRefresh();
 });
 
@@ -716,24 +655,17 @@ function checkClientId(){const v=document.getElementById('clientIdInput').value.
 function saveClientId(){
   const v=document.getElementById('clientIdInput').value.trim();
   if(v.length<20){alert('Incolla il Client ID completo — dovrebbe terminare con .apps.googleusercontent.com');return;}
-  CLIENT_ID=v;setCookie(LS_CLIENT,CLIENT_ID,365);localStorage.setItem(LS_CLIENT,CLIENT_ID);
+  CLIENT_ID=v;localStorage.setItem(LS_CLIENT,CLIENT_ID);
   document.getElementById('setupScreen').style.display='none';trySilentRefresh();
 }
-function resetClientId(){deleteCookie(LS_CLIENT);localStorage.removeItem(LS_CLIENT);localStorage.removeItem(LS_TOKEN);deleteCookie(LS_TOKEN);CLIENT_ID='';showSetup();}
+function resetClientId(){localStorage.removeItem(LS_CLIENT);localStorage.removeItem(LS_TOKEN);CLIENT_ID='';showSetup();}
 
 function startOAuthFlow(){
   const redirectUri=location.href.split('#')[0].split('?')[0];
   const params=new URLSearchParams({client_id:CLIENT_ID,redirect_uri:redirectUri,response_type:'token',scope:SCOPE+' https://www.googleapis.com/auth/userinfo.profile',prompt:'select_account'});
-  const url='https://accounts.google.com/o/oauth2/v2/auth?'+params.toString();
-  if(isIOS()||isPWA()){
-    // iPhone/iPad/PWA: redirect nella stessa finestra (popup bloccati)
-    window.location.href=url;
-  } else {
-    // Desktop: popup classico
-    const w=500,h=600,left=Math.round((screen.width-w)/2),top=Math.round((screen.height-h)/2);
-    window.open(url,'googleauth',`width=${w},height=${h},left=${left},top=${top},menubar=no,toolbar=no`);
-    window.addEventListener('message',handleOAuthMessage,{once:true});
-  }
+  const w=500,h=600,left=Math.round((screen.width-w)/2),top=Math.round((screen.height-h)/2);
+  window.open('https://accounts.google.com/o/oauth2/v2/auth?'+params.toString(),'googleauth',`width=${w},height=${h},left=${left},top=${top},menubar=no,toolbar=no`);
+  window.addEventListener('message',handleOAuthMessage,{once:true});
 }
 function handleOAuthMessage(e){
   if(e.origin!==location.origin||!e.data||e.data.type!=='oauth_token')return;
@@ -951,7 +883,7 @@ function openNew(){
   document.getElementById('fTitle').textContent='Nuovo ordine';
   document.getElementById('fId').value='';
   ['fNome','fTel','fEmail','fDesc','fOrdNum','fDataOrd','fDataCons','fFile','fNote'].forEach(id=>document.getElementById(id).value='');
-  ['fQty','fPeso','fPesoTot','fOre','fOreProgett','fSpese','fTot','fProf','fCostoMat','fCostoMacchina','fCostoProgett','fPrezzoUnit'].forEach(id=>document.getElementById(id).value='');
+  ['fQty','fPeso','fPesoTot','fOre','fOreProgett','fSpese','fTot','fProf','fCostoMat','fCostoMacchina','fCostoProgett','fPrezzoUnit','fOreProgettDisplay'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('fMat').value='';document.getElementById('fMatAltroWrap').style.display='none';
   document.getElementById('fStato').value='preventivo';document.getElementById('fProgett').value='';
   document.getElementById('fOrdNum').placeholder='#'+nextId;
@@ -1563,8 +1495,8 @@ function generatePDF(id){
   const footerY=282;
   doc.setDrawColor(...C.border);doc.line(ml,footerY,W-mr,footerY);
   rgb(...C.text2,false);doc.setFont('helvetica','normal');doc.setFontSize(7);
-  const footerTxt=myInfo.footer||'';
-  if(footerTxt) doc.text(footerTxt,ml,footerY+4);
+  const footerTxt=myInfo.footer||'I prezzi indicati sono al netto di IVA e spese di spedizione.';
+  doc.text(footerTxt,ml,footerY+4);
   doc.text('Pagina 1 di 1',W-mr,footerY+4,{align:'right'});
 
   const fname=`preventivo_${(o.nome||'cliente').replace(/\s+/g,'_')}_${o.ordNum}.pdf`;
@@ -1572,18 +1504,6 @@ function generatePDF(id){
   showToast('📄 PDF scaricato — fatturato aggiornato!');
 }
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTm);toastTm=setTimeout(()=>t.classList.remove('show'),3400);}
-
-// Pulizia automatica: rimuove qualsiasi service worker residuo da versioni precedenti
-try{
-  if('serviceWorker' in navigator){
-    navigator.serviceWorker.getRegistrations().then(regs=>{
-      regs.forEach(r=>r.unregister());
-    }).catch(()=>{});
-  }
-  if('caches' in window){
-    caches.keys().then(names=>names.forEach(n=>caches.delete(n))).catch(()=>{});
-  }
-}catch(e){}
 </script>
 </body>
 </html>
