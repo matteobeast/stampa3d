@@ -613,15 +613,37 @@ function isPWA(){
     navigator.standalone===true;
 }
 
-// ── INIT — versione APP (Windows/Edge/Android PWA) ──
+// ── INIT — versione APP (Windows/Edge/Android PWA / iOS Home Screen) ──
 window.addEventListener('load',()=>{
   try{loadSettings();}catch(e){}
 
-  // Popup che torna da Google con il token
+  // Popup desktop che torna da Google
   if(window.opener&&window.opener!==window){
     const h=window.location.hash;
     if(h&&h.includes('access_token'))window.opener.postMessage({type:'oauth_token',hash:h},window.location.origin);
     window.close();return;
+  }
+
+  // Redirect che torna da Google con il token nell'URL
+  // (succede quando su iOS il login viene aperto in Safari con _blank, perché
+  // uno standalone Home Screen non mantiene window.opener sui popup)
+  const urlHash=window.location.hash;
+  if(urlHash.includes('access_token')){
+    history.replaceState(null,'',location.pathname+location.search);
+    const p=new URLSearchParams(urlHash.slice(1));
+    const token=p.get('access_token');
+    const expires=parseInt(p.get('expires_in')||'3600');
+    if(token){
+      accessToken=token;tokenExpiry=Date.now()+expires*1000;
+      fetchUserInfo(true).then(()=>{
+        // Se siamo in Safari (non nell'app standalone) → mostra "torna all'app"
+        if(!isPWA()&&isIOS()){showReturnToApp();return;}
+        loadFromDrive();
+      }).catch(()=>loadFromDrive());
+      if(!isPWA()&&isIOS()){return;} // aspettiamo fetchUserInfo
+      showApp();scheduleTokenRefresh(tokenExpiry);
+    } else showLogin();
+    return;
   }
 
   if(!CLIENT_ID){showSetup();return;}
@@ -636,7 +658,10 @@ window.addEventListener('load',()=>{
     showApp();loadFromDrive();scheduleTokenRefresh(expiry);return;
   }
 
-  // Silent refresh con iframe (funziona su Edge/Chrome/Android)
+  // Su iOS → mostra login diretto (redirect/cookie relay, non iframe)
+  if(isIOS()){hideSplash();showLogin();return;}
+
+  // Desktop/Android → silent refresh con iframe
   trySilentRefresh();
 });
 
@@ -663,7 +688,10 @@ function trySilentRefresh(){
 function scheduleTokenRefresh(expiry){
   const d=expiry-Date.now()-5*60*1000;
   if(d<=0)return;
-  setTimeout(()=>trySilentRefresh(),d);
+  setTimeout(()=>{
+    if(isIOS()){showLogin();return;} // iOS: chiede login esplicito
+    trySilentRefresh();
+  },d);
 }
 
 // ── SPLASH ──
@@ -698,10 +726,67 @@ function startOAuthFlow(){
   const redirectUri=location.href.split('#')[0].split('?')[0];
   const params=new URLSearchParams({client_id:CLIENT_ID,redirect_uri:redirectUri,response_type:'token',scope:SCOPE+' https://www.googleapis.com/auth/userinfo.profile',prompt:'select_account'});
   const authUrl='https://accounts.google.com/o/oauth2/v2/auth?'+params.toString();
-  // Popup classico con postMessage — funziona su Edge/Chrome/Android
+
+  if(isIOS()&&isPWA()){
+    // iOS standalone (app da Home Screen): apriamo Safari con _blank.
+    // Google fa redirect a questa stessa pagina#access_token=...
+    // quella pagina (in Safari normale) salva il token nel cookie e mostra
+    // "torna all'app". L'utente torna e trova il cookie pronto.
+    window.open(authUrl,'_blank');
+    // Aspettiamo che l'utente torni e controlliamo il cookie
+    startTokenPolling();
+    return;
+  }
+
+  if(isIOS()){
+    // Safari iOS normale (non standalone): redirect diretto
+    location.href=authUrl;
+    return;
+  }
+
+  // Desktop/Android: popup classico con postMessage
   const w=500,h=600,left=Math.round((screen.width-w)/2),top=Math.round((screen.height-h)/2);
   window.open(authUrl,'googleauth',`width=${w},height=${h},left=${left},top=${top},menubar=no,toolbar=no`);
   window.addEventListener('message',handleOAuthMessage,{once:true});
+}
+// Polling per iOS standalone: aspetta che il cookie venga scritto da Safari
+let _oauthPoll=null;
+function startTokenPolling(){
+  showSplash('Completa il login in Safari…<br><span style="font-size:12px;margin-top:4px;display:block">poi torna qui premendo Home → Stampa3D</span>');
+  if(_oauthPoll)clearInterval(_oauthPoll);
+  _oauthPoll=setInterval(()=>{
+    const saved=loadToken();
+    if(!saved)return;
+    clearInterval(_oauthPoll);_oauthPoll=null;
+    document.removeEventListener('visibilitychange',_onVisOAuth);
+    accessToken=saved.token;tokenExpiry=saved.expiry;
+    if(saved.userName)document.getElementById('userName').textContent=saved.userName;
+    if(saved.userPic)document.getElementById('userAvatar').src=saved.userPic;
+    hideSplash();showApp();loadFromDrive();scheduleTokenRefresh(saved.expiry);
+  },600);
+  document.addEventListener('visibilitychange',_onVisOAuth);
+  setTimeout(()=>{
+    if(!_oauthPoll)return;
+    clearInterval(_oauthPoll);_oauthPoll=null;
+    document.removeEventListener('visibilitychange',_onVisOAuth);
+    hideSplash();showLogin();
+  },10*60*1000);
+}
+function _onVisOAuth(){
+  if(document.visibilityState!=='visible')return;
+  const saved=loadToken();
+  if(!saved)return;
+  if(_oauthPoll){clearInterval(_oauthPoll);_oauthPoll=null;}
+  document.removeEventListener('visibilitychange',_onVisOAuth);
+  accessToken=saved.token;tokenExpiry=saved.expiry;
+  if(saved.userName)document.getElementById('userName').textContent=saved.userName;
+  if(saved.userPic)document.getElementById('userAvatar').src=saved.userPic;
+  hideSplash();showApp();loadFromDrive();scheduleTokenRefresh(saved.expiry);
+}
+
+// Schermata "torna all'app" mostrata in Safari dopo il login iOS
+function showReturnToApp(){
+  document.body.innerHTML=`<div style="position:fixed;inset:0;background:#0f0f0f;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:32px;font-family:-apple-system,sans-serif;color:#efefef;text-align:center"><div style="width:64px;height:64px;border-radius:18px;background:#7f5af0;display:flex;align-items:center;justify-content:center"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div><div style="font-size:22px;font-weight:700">Login completato ✓</div><div style="font-size:15px;color:#888;line-height:1.7;margin-top:8px">Premi il tasto <strong style="color:#efefef">Home</strong> e<br>riapri <strong style="color:#c4b5fd">Stampa3D</strong><br>dall'icona sulla schermata Home.</div></div>`;
 }
 function handleOAuthMessage(e){
   if(e.origin!==location.origin||!e.data||e.data.type!=='oauth_token')return;
