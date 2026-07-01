@@ -22,7 +22,7 @@
   --amber:#e9a23b;--amber-bg:rgba(233,162,59,.1);--amber-t:#fcd586;
   --r:14px;--rs:10px
 }
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:15px}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:15px;overscroll-behavior-y:none}
 
 /* ── SETUP ── */
 .setup-label{font-size:12px;color:var(--text2);margin-bottom:6px;text-align:left}
@@ -57,7 +57,7 @@ code{background:var(--s2);padding:2px 6px;border-radius:4px;font-size:12px;font-
 #app{display:none;padding-bottom:80px}
 
 /* header */
-.hdr{background:var(--s1);border-bottom:.5px solid var(--border);padding:max(0px,env(safe-area-inset-top)) 16px 0;position:sticky;top:0;z-index:100;min-height:56px;display:flex;align-items:center;gap:10px}
+.hdr{background:var(--s1);border-bottom:.5px solid var(--border);padding:calc(env(safe-area-inset-top) + 10px) 16px 14px;position:sticky;top:0;z-index:100;display:flex;align-items:center;gap:10px;transform:translateZ(0);will-change:transform;backface-visibility:hidden}
 .logo{width:32px;height:32px;border-radius:9px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .hdr-title{font-size:16px;font-weight:700}
 .sync-badge{font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;padding:4px 10px;background:var(--s2);border-radius:20px;border:.5px solid var(--border)}
@@ -69,7 +69,7 @@ code{background:var(--s2);padding:2px 6px;border-radius:4px;font-size:12px;font-
 .user-chip span{font-size:12px;color:var(--text2)}
 
 /* tab bar */
-.tab-bar{position:fixed;bottom:0;left:0;right:0;background:var(--s1);border-top:.5px solid var(--border);display:flex;z-index:100;padding:8px 0 max(8px,env(safe-area-inset-bottom))}
+.tab-bar{position:fixed;bottom:0;left:0;right:0;background:var(--s1);border-top:.5px solid var(--border);display:flex;z-index:100;padding:8px 0 max(8px,env(safe-area-inset-bottom));-webkit-transform:translateZ(0);transform:translateZ(0);will-change:transform;backface-visibility:hidden}
 .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;color:var(--text3);cursor:pointer;padding:4px 0;-webkit-tap-highlight-color:transparent}
 .tab.on{color:var(--accent)}
 .tab svg{width:22px;height:22px;stroke-width:1.8}
@@ -208,7 +208,7 @@ select option{background:var(--s2)}
 .phl{color:var(--accent-t);text-decoration:none;font-weight:500}
 
 /* FAB */
-.fab{position:fixed;bottom:90px;right:18px;width:52px;height:52px;border-radius:50%;background:var(--accent);border:none;color:#fff;font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:99;box-shadow:0 4px 20px rgba(127,90,240,.4);-webkit-tap-highlight-color:transparent}
+.fab{position:fixed;bottom:90px;right:18px;width:52px;height:52px;border-radius:50%;background:var(--accent);border:none;color:#fff;font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:99;box-shadow:0 4px 20px rgba(127,90,240,.4);-webkit-tap-highlight-color:transparent;transform:translateZ(0);will-change:transform;backface-visibility:hidden}
 .fab:active{transform:scale(.93)}
 
 /* AUTOCOMPLETE */
@@ -385,7 +385,6 @@ select option{background:var(--s2)}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:84px;right:12px;z-index:50;background:var(--s2);border:.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:11px;color:var(--text2);">🖥 Versione App Desktop · <a href="stampa3d_web.html" style="color:var(--accent-t)">📱 Versione iOS/Safari</a></div>
 <div class="ov" id="ov" onclick="closeAll()"></div>
 
 <!-- FORM PANEL -->
