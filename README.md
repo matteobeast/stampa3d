@@ -1,1 +1,0 @@
-# stampa3d
